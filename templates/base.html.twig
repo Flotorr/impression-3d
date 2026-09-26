@@ -22,11 +22,21 @@
         <meta property="og:image:alt" content="Calculateur de coût d'impression 3D">
         <meta name="twitter:card" content="summary_large_image">
         <meta name="theme-color" content="#123f94">
+        {% if google_site_verification %}
+            <meta name="google-site-verification" content="{{ google_site_verification }}">
+        {% endif %}
 
         {% block structured_data %}{% endblock %}
         {% block javascripts %}
             {% block importmap %}{{ importmap('app') }}{% endblock %}
         {% endblock %}
+        {% if umami_website_id %}
+            {# Umami, cookieless. Auto-tracking is off because the calculator rewrites the URL on every change,
+               and the pageview is sent without query string: shared links carry the values the visitor typed. #}
+            <script defer src="https://cloud.umami.is/script.js" data-website-id="{{ umami_website_id }}"
+                    data-auto-track="false" data-do-not-track="true"
+                    onload="umami.track(function (props) { return Object.assign({}, props, { url: location.pathname }); })"></script>
+        {% endif %}
     </head>
     <body>
         <div class="topbar">

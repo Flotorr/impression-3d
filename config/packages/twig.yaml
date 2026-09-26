@@ -3,6 +3,8 @@ twig:
     globals:
         site_url: '%app.site_url%' # canonical / Open Graph / JSON-LD base, no trailing slash
         features: '%app.features%' # see app.features in services.yaml
+        umami_website_id: '%env(UMAMI_WEBSITE_ID)%' # empty = no analytics script
+        google_site_verification: '%env(GOOGLE_SITE_VERIFICATION)%' # empty = no Search Console meta tag
 
 when@test:
     twig:

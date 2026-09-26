@@ -47,9 +47,16 @@
                 </p>
                 <p>
                     Ce site ne demande aucun compte et ne dépose aucun cookie de suivi ou de publicité.
-                    <mark class="todo">[À COMPLÉTER : mettez à jour ce paragraphe si vous ajoutez un outil de mesure d'audience,
-                    et précisez les journaux de connexion conservés par votre hébergeur.]</mark>
+                    <mark class="todo">[À COMPLÉTER : précisez les journaux de connexion conservés par votre hébergeur.]</mark>
                 </p>
+                {% if umami_website_id %}
+                    <p>
+                        La fréquentation est mesurée avec Umami, un outil de mesure d'audience sans cookie qui ne conserve
+                        pas votre adresse IP et ne vous suit pas d'un site à l'autre. Il compte les pages vues et l'usage
+                        du calculateur (calcul lancé, lien copié, modèle d'imprimante choisi) ; les valeurs que vous saisissez
+                        ne lui sont pas transmises. Si votre navigateur envoie le signal « Do Not Track », aucune mesure n'est faite.
+                    </p>
+                {% endif %}
                 <p>
                     Conformément au RGPD, vous disposez de droits d'accès, de rectification et d'effacement
                     sur vos données : contactez l'éditeur à l'adresse indiquée ci-dessus.

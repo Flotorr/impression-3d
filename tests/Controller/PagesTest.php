@@ -202,6 +202,50 @@ final class PagesTest extends WebTestCase
         $this->assertStringContainsString('Sitemap: https://flotor.fr/sitemap.xml', $robots);
     }
 
+    public function testNoAnalyticsWithoutWebsiteId(): void
+    {
+        $client = static::createClient();
+        $crawler = $client->request('GET', self::CALCULATOR_PATH);
+
+        $this->assertCount(0, $crawler->filter('script[src*="umami"]'));
+    }
+
+    public function testAnalyticsScriptNeverSendsTheQueryString(): void
+    {
+        $_SERVER['UMAMI_WEBSITE_ID'] = $_ENV['UMAMI_WEBSITE_ID'] = 'test-website-id';
+        try {
+            $client = static::createClient();
+            $crawler = $client->request('GET', self::CALCULATOR_PATH.'?w=100');
+        } finally {
+            $_SERVER['UMAMI_WEBSITE_ID'] = $_ENV['UMAMI_WEBSITE_ID'] = '';
+        }
+
+        $script = $crawler->filter('script[src="https://cloud.umami.is/script.js"]');
+        $this->assertCount(1, $script);
+        $this->assertSame('test-website-id', $script->attr('data-website-id'));
+        // The calculator rewrites the URL on each change: automatic pageviews would fire on every keystroke.
+        $this->assertSame('false', $script->attr('data-auto-track'));
+        $this->assertStringContainsString('location.pathname', $script->attr('onload'));
+    }
+
+    public function testSearchConsoleVerificationTag(): void
+    {
+        $client = static::createClient();
+        $crawler = $client->request('GET', self::CALCULATOR_PATH);
+        $this->assertCount(0, $crawler->filter('meta[name="google-site-verification"]'), 'no tag without a code');
+
+        self::ensureKernelShutdown();
+        $_SERVER['GOOGLE_SITE_VERIFICATION'] = $_ENV['GOOGLE_SITE_VERIFICATION'] = 'test-code';
+        try {
+            $client = static::createClient();
+            $crawler = $client->request('GET', self::FAQ_PATH);
+        } finally {
+            $_SERVER['GOOGLE_SITE_VERIFICATION'] = $_ENV['GOOGLE_SITE_VERIFICATION'] = '';
+        }
+
+        $this->assertSame('test-code', $crawler->filter('meta[name="google-site-verification"]')->attr('content'));
+    }
+
     private function feature(string $name): bool
     {
         return static::getContainer()->getParameter('app.features')[$name];

@@ -41,12 +41,20 @@ export default class extends Controller {
         if (price !== undefined) {
             this.setField('printerPriceEur', price);
         }
+        if (event.target.value) {
+            this.trackEvent('imprimante', { modele: event.target.value });
+        }
     }
 
     // User changed something: recalculate and keep the address bar shareable.
     update() {
         this.refresh();
         this.syncUrl();
+        // Counted once per visit: "used the calculator", not every keystroke.
+        if (!this.calculationTracked) {
+            this.calculationTracked = true;
+            this.trackEvent('calcul');
+        }
     }
 
     refresh() {
@@ -107,6 +115,12 @@ export default class extends Controller {
             copied = this.copyWithSelection(url);
         }
         this.announceCopy(copied ? 'Lien copié dans le presse-papiers.' : 'Copie impossible : copiez le lien depuis la barre d\'adresse.');
+        this.trackEvent('lien-partage');
+    }
+
+    // Umami custom event. No-op when the analytics script is absent (dev, tests, blocked by the visitor).
+    trackEvent(name, data) {
+        window.umami?.track(name, data);
     }
 
     // Fallback for browsers or contexts without the async Clipboard API.

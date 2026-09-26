@@ -51,6 +51,17 @@ Pour réactiver la page légale, décommenter aussi son `<url>` dans `public/sit
 Après changement en production : `APP_ENV=prod php bin/console cache:clear`.
 Un ancien lien partagé en mode Avancé reste lisible : les champs devenus inutiles sont ignorés.
 
+## Mesure d'audience (Umami)
+
+Umami Cloud, sans cookie (pas de bandeau de consentement). Actif seulement si `UMAMI_WEBSITE_ID` est renseigné,
+dans `.env.prod` : le dev et les tests n'envoient rien. Le suivi automatique est coupé, car le calculateur réécrit l'URL
+à chaque saisie ; une seule page vue est envoyée, sans query string (les liens de partage contiennent les valeurs saisies).
+Événements : `calcul` (une fois par visite, au premier changement), `lien-partage`, `imprimante` (modèle choisi).
+Le paragraphe correspondant des mentions légales s'affiche automatiquement quand Umami est actif.
+
+Google Search Console (propriété « Préfixe d'URL », méthode « Balise HTML ») : mettre la valeur `content` de la balise
+dans `GOOGLE_SITE_VERIFICATION` (`.env.prod`) ; la balise `<meta name="google-site-verification">` est alors ajoutée à toutes les pages.
+
 ## Architecture
 
 - `assets/lib/cost-calculator.js` : calcul pur, sans DOM, sans arrondi (l'arrondi est uniquement à l'affichage).
@@ -72,6 +83,12 @@ Un ancien lien partagé en mode Avancé reste lisible : les champs devenus inuti
 - Mode Simple : filament + électricité + marge ; les champs avancés sont ignorés.
 
 ## Déploiement
+
+Hostinger (mutualisé, racine web `public_html/`) : `powershell -ExecutionPolicy Bypass -File scripts\build-prod.ps1`
+produit `build/flotor-prod.zip` (dépendances sans dev, assets compilés, `.env.local.php` de prod, `.htaccess` racine
+qui redirige vers `public/`). Le décompresser dans `public_html/`, avec PHP 8.4+ sélectionné dans hPanel.
+
+Autre serveur, étapes manuelles :
 
 ```bash
 composer install --no-dev --optimize-autoloader
