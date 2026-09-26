@@ -1,0 +1,13 @@
+framework:
+    asset_mapper:
+        # The paths to make available to the asset mapper.
+        paths:
+            - assets/
+        missing_import_mode: strict
+        # All supported browsers handle import maps natively: no external polyfill request.
+        importmap_polyfill: false
+
+when@prod:
+    framework:
+        asset_mapper:
+            missing_import_mode: warn

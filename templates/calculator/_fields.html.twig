@@ -1,0 +1,16 @@
+{# Form field macros. Values come from config/calculator.yaml (decimal comma for display). #}
+
+{% macro number(name, label, unit, values, hint = null) %}
+    <div class="field">
+        <label for="f-{{ name }}">{{ label }}</label>
+        <div class="input-wrap">
+            <input type="text" inputmode="decimal" autocomplete="off"
+                   id="f-{{ name }}" name="{{ name }}"
+                   value="{{ ((values[name] ?? '') ~ '')|replace({'.': ','}) }}"
+                   {% if hint %}aria-describedby="h-{{ name }}"{% endif %}>
+            {% if unit %}<span class="unit" aria-hidden="true">{{ unit }}</span>{% endif %}
+        </div>
+        {% if hint %}<p class="hint" id="h-{{ name }}">{{ hint }}</p>{% endif %}
+        <p class="error" data-error-for="{{ name }}" role="alert" hidden></p>
+    </div>
+{% endmacro %}

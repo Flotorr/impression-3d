@@ -1,0 +1,709 @@
+/* Flotor calculator styles. One file, no build step, system fonts only. */
+
+:root {
+    /* Surfaces and text */
+    --bg: #f4f6fb;
+    --surface: #fff;
+    --ink: #0f1a2e;
+    --text: #1b2538;
+    --muted: #55627a;
+    --border: #e2e7ef;
+    --border-strong: #8792a5; /* form control edges: >= 3:1 against white */
+
+    /* Brand */
+    --accent: #1a63d6;
+    --accent-dark: #123f94;
+    --accent-soft: #e4edfd;
+    --danger: #b42318;
+
+    /* One colour per cost line: form cards, donut arcs and legend swatches */
+    --c-filament: #2563eb;
+    --c-purge: #7c3aed;
+    --c-electricity: #f59e0b;
+    --c-wear: #64748b;
+    --c-failure: #dc2626;
+    --c-labor: #059669;
+    --c-extras: #db2777;
+
+    --radius: 14px;
+    --radius-sm: 10px;
+    --gap: 1rem;
+    --shadow: 0 1px 2px rgb(16 24 40 / .05), 0 8px 24px rgb(16 24 40 / .06);
+
+    color-scheme: light;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    line-height: 1.6;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* Author display rules (flex, grid) must not override the hidden attribute. */
+[hidden] { display: none !important; }
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+    color: var(--ink);
+    letter-spacing: -.02em;
+}
+
+a { color: var(--accent); text-underline-offset: .15em; }
+a:hover { color: var(--accent-dark); }
+
+.container {
+    width: 100%;
+    max-width: 72rem;
+    margin-inline: auto;
+    padding-inline: var(--gap);
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+/* ---------- Top bar ---------- */
+.topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+}
+.topbar-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 3.5rem;
+}
+.brand {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    color: var(--ink);
+    font-size: 1.15rem;
+    font-weight: 800;
+    letter-spacing: -.02em;
+    text-decoration: none;
+}
+.brand:hover { color: var(--ink); }
+.brand-mark {
+    width: 1.75rem;
+    height: 1.75rem;
+    color: var(--accent);
+}
+.brand-tld { color: var(--accent); }
+.topbar-nav { display: flex; gap: 1.25rem; }
+.topbar-nav a {
+    color: var(--muted);
+    font-size: .95rem;
+    font-weight: 500;
+    text-decoration: none;
+}
+.topbar-nav a:hover { color: var(--accent); }
+
+/* ---------- Hero / page header ---------- */
+.site-header {
+    padding-block: 1.75rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+}
+.hero {
+    padding-block: 2.25rem 2.75rem;
+    border-bottom: 0;
+    background:
+        radial-gradient(60rem 22rem at 85% -10%, #dbe7ff 0%, rgb(219 231 255 / 0) 70%),
+        linear-gradient(180deg, #eef4ff 0%, var(--bg) 100%);
+}
+.hero-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+}
+.hero-text { max-width: 44rem; }
+.site-header h1 {
+    margin: 0 0 .75rem;
+    font-size: clamp(1.75rem, 5.5vw, 2.6rem);
+    font-weight: 800;
+    line-height: 1.12;
+}
+.lead {
+    margin: 0;
+    font-size: 1.05rem;
+    color: var(--muted);
+}
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin: 1.25rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+.chips li {
+    padding: .25rem .75rem;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    font-size: .85rem;
+    font-weight: 600;
+}
+
+/* ---------- Layout: form, then result (side by side on wide screens) ---------- */
+main { padding-block: 0 3rem; }
+.page-head + main { padding-top: 2rem; }
+
+/* A flex column (not a grid) on small screens: the sticky summary bar needs the whole
+   calculator as its containing block. */
+.calculator {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+@media (min-width: 60rem) {
+    .calculator {
+        display: grid;
+        grid-template-columns: minmax(0, 40rem) minmax(0, 1fr);
+        align-items: start;
+        gap: 2rem;
+    }
+    .result { position: sticky; top: 1rem; }
+}
+
+/* ---------- Form ---------- */
+.calculator-form {
+    display: grid;
+    gap: var(--gap);
+}
+
+fieldset {
+    min-width: 0; /* let fieldsets shrink inside grids */
+    margin: 0;
+    padding: 1.15rem 1.25rem 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+/* Legend as a card title: floating full width keeps it inside the card, unlike the
+   default legend that straddles the border. */
+legend {
+    float: left;
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    width: 100%;
+    margin: 0 0 1rem;
+    padding: 0;
+    color: var(--ink);
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: -.01em;
+}
+legend + * { clear: both; }
+legend::before {
+    content: "";
+    flex: none;
+    width: .7rem;
+    height: .7rem;
+    border-radius: 50%;
+    background: var(--tone, var(--accent));
+}
+fieldset > :not(legend) + :not(legend),
+fieldset [data-advanced] > * + * { margin-top: .9rem; }
+
+[data-tone="print"] { --tone: var(--ink); }
+[data-tone="filament"] { --tone: var(--c-filament); }
+[data-tone="electricity"] { --tone: var(--c-electricity); }
+[data-tone="wear"] { --tone: var(--c-wear); }
+[data-tone="failure"] { --tone: var(--c-failure); }
+[data-tone="labor"] { --tone: var(--c-labor); }
+[data-tone="extras"] { --tone: var(--c-extras); }
+[data-tone="micro"] { --tone: var(--c-purge); }
+[data-tone="price"] { --tone: var(--accent); }
+
+.field-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: .9rem;
+}
+.field { min-width: 0; }
+.field label {
+    display: block;
+    margin-bottom: .3rem;
+    color: var(--ink);
+    font-size: .9rem;
+    font-weight: 600;
+}
+
+.input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.input-wrap input { padding-right: 3.25rem; }
+.unit {
+    position: absolute;
+    right: .55rem;
+    padding: .1rem .45rem;
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--muted);
+    font-size: .8rem;
+    font-weight: 600;
+    pointer-events: none;
+}
+
+input[type="text"],
+select {
+    width: 100%;
+    min-height: 2.9rem; /* comfortable touch target */
+    padding: .5rem .8rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    transition: border-color .15s, box-shadow .15s;
+}
+input[type="text"]:hover,
+select:hover { border-color: var(--muted); }
+input:focus-visible,
+select:focus-visible,
+button:focus-visible,
+a:focus-visible {
+    outline: 3px solid rgb(26 99 214 / .35);
+    outline-offset: 1px;
+    border-color: var(--accent);
+}
+input[aria-invalid="true"] { border-color: var(--danger); }
+
+.hint {
+    margin: .3rem 0 0;
+    font-size: .82rem;
+    color: var(--muted);
+    line-height: 1.45;
+}
+.error {
+    margin: .3rem 0 0;
+    font-size: .85rem;
+    font-weight: 500;
+    color: var(--danger);
+}
+
+.check {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    font-weight: 500;
+}
+.check input {
+    width: 1.15rem;
+    height: 1.15rem;
+    accent-color: var(--accent);
+}
+
+/* Mode switch: segmented control */
+.segmented {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .25rem;
+    padding: .25rem;
+    border-radius: 12px;
+    background: #e9edf5;
+}
+.mode-option {
+    position: relative;
+    display: block;
+    padding: .55rem .5rem;
+    border-radius: 9px;
+    text-align: center;
+    cursor: pointer;
+    transition: background .15s, box-shadow .15s;
+}
+.mode-option input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+.mode-option strong { display: block; color: var(--muted); }
+.mode-option small {
+    display: block;
+    color: var(--muted);
+    font-size: .78rem;
+    line-height: 1.3;
+}
+.mode-option:has(input:checked) {
+    background: var(--surface);
+    box-shadow: 0 1px 3px rgb(16 24 40 / .18);
+}
+.mode-option:has(input:checked) strong { color: var(--accent-dark); }
+.mode-option:has(input:focus-visible) {
+    outline: 3px solid rgb(26 99 214 / .35);
+    outline-offset: 1px;
+}
+.mode-card legend {
+    color: var(--muted);
+    font-size: .8rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+.mode-card legend::before { display: none; }
+
+/* Advanced fields are hidden in Simple mode. Pure CSS, so it also works without JS. */
+.calculator:has(input[name="mode"][value="simple"]:checked) [data-advanced] {
+    display: none;
+}
+.calculator-form > [data-advanced] {
+    display: grid;
+    gap: var(--gap);
+}
+
+/* ---------- Result ---------- */
+.result {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+.result-hero {
+    padding: 1.25rem 1.5rem 1.5rem;
+    background: linear-gradient(135deg, #1859c2 0%, var(--accent-dark) 100%);
+    color: #fff;
+}
+.result-hero h2 {
+    margin: 0 0 .75rem;
+    color: #e6eeff;
+    font-size: .8rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+.hero-label { margin: 0; color: #e6eeff; }
+.hero-price {
+    margin: 0;
+    font-size: clamp(2.4rem, 9vw, 3.25rem);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -.03em;
+    font-variant-numeric: tabular-nums;
+}
+.hero-micro {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: .25rem 1rem;
+    margin-top: 1rem;
+    padding-top: .9rem;
+    border-top: 1px solid rgb(255 255 255 / .3);
+    color: #e6eeff;
+}
+.hero-micro strong {
+    color: #fff;
+    font-size: 1.5rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.result-body { padding: 1.25rem 1.5rem 1.5rem; }
+.alert {
+    margin: 0 0 1rem;
+    padding: .6rem .8rem;
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-sm);
+    background: #fef3f2;
+    color: var(--danger);
+    font-size: .9rem;
+}
+
+.summary { margin: 0; }
+.summary-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: .25rem 1rem;
+    padding-block: .55rem;
+    border-bottom: 1px solid var(--border);
+}
+.summary-row:last-child { border-bottom: 0; }
+.summary dt { color: var(--muted); }
+.summary dd {
+    margin: 0;
+    color: var(--ink);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Cost breakdown: donut + legend */
+.breakdown {
+    margin-top: 1rem;
+    padding-top: 1.1rem;
+    border-top: 1px solid var(--border);
+}
+.breakdown h3 {
+    margin: 0 0 .9rem;
+    font-size: 1rem;
+}
+.breakdown-body {
+    display: grid;
+    gap: 1.1rem;
+    justify-items: center;
+}
+.breakdown-body .legend { justify-self: stretch; }
+
+.donut-figure {
+    position: relative;
+    width: 11rem;
+    max-width: 100%;
+}
+.donut {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+.donut circle {
+    fill: none;
+    stroke-width: 5.5;
+}
+.donut-track { stroke: #edf0f6; }
+.donut-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.25;
+}
+.donut-center span { color: var(--muted); font-size: .75rem; }
+.donut-center strong {
+    color: var(--ink);
+    font-size: 1.15rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.donut-segment--filament, .swatch--filament { --line: var(--c-filament); }
+.donut-segment--purge, .swatch--purge { --line: var(--c-purge); }
+.donut-segment--electricity, .swatch--electricity { --line: var(--c-electricity); }
+.donut-segment--wear, .swatch--wear { --line: var(--c-wear); }
+.donut-segment--failure, .swatch--failure { --line: var(--c-failure); }
+.donut-segment--labor, .swatch--labor { --line: var(--c-labor); }
+.donut-segment--extras, .swatch--extras { --line: var(--c-extras); }
+.donut-segment {
+    stroke: var(--line);
+    /* Arcs slide to their new size when the result is recalculated. */
+    transition: stroke-dasharray .5s ease, stroke-dashoffset .5s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+    .donut-segment { transition: none; }
+}
+.swatch {
+    flex: none;
+    width: .75rem;
+    height: .75rem;
+    border-radius: 4px;
+    background: var(--line);
+}
+
+.legend {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: .9rem;
+}
+.legend li {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding-block: .35rem;
+    border-bottom: 1px solid var(--border);
+}
+.legend li:last-child { border-bottom: 0; }
+.legend-label { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.legend-amount, .legend-share { font-variant-numeric: tabular-nums; }
+.legend-amount { color: var(--ink); font-weight: 700; }
+.legend-share {
+    min-width: 3.2rem;
+    text-align: right;
+    color: var(--muted);
+}
+
+/* Share link */
+.share {
+    margin-top: 1.1rem;
+    padding-top: 1.1rem;
+    border-top: 1px solid var(--border);
+}
+.button {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    min-height: 2.9rem;
+    padding: .5rem 1.1rem;
+    border: 2px solid var(--accent);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--accent-dark);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+}
+.button:hover { background: var(--accent-soft); }
+.button .button-done { display: none; }
+.button.is-done {
+    border-color: #0b6b3a;
+    background: #e6f6ee;
+    color: #0b6b3a;
+}
+.button.is-done .button-label { display: none; }
+.button.is-done .button-done { display: inline; }
+
+/* ---------- Compact summary, sticky at the bottom of the calculator on small screens ---------- */
+.summary-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    padding: .6rem var(--gap) calc(.6rem + env(safe-area-inset-bottom, 0px));
+    margin-inline: calc(-1 * var(--gap)); /* full width inside the container gutter */
+    border-top: 1px solid var(--border);
+    background: rgb(255 255 255 / .96);
+    box-shadow: 0 -4px 14px rgb(16 24 40 / .08);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.3;
+}
+.summary-bar-label {
+    display: block;
+    color: var(--muted);
+    font-size: .75rem;
+}
+.summary-bar strong { color: var(--ink); }
+.summary-bar div:nth-child(2) strong { color: var(--accent-dark); }
+.summary-bar a { margin-left: auto; font-weight: 600; }
+@media (min-width: 60rem) {
+    .summary-bar { display: none; }
+}
+
+/* ---------- Content sections (formulas, FAQ, legal) ---------- */
+.content { padding-top: 1rem; }
+.prose { max-width: 48rem; }
+.content-section { margin-top: 3rem; }
+.content-section > h2 {
+    margin: 0 0 .75rem;
+    font-size: clamp(1.4rem, 4vw, 1.8rem);
+    font-weight: 800;
+    line-height: 1.2;
+}
+.content-section > p {
+    max-width: 46rem;
+    margin: .4rem 0 0;
+    color: var(--muted);
+}
+
+.cards {
+    display: grid;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+@media (min-width: 45rem) {
+    .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cards--stack { grid-template-columns: minmax(0, 1fr); } /* long answers: one column */
+}
+.card {
+    padding: 1.15rem 1.25rem 1.25rem;
+    border: 1px solid var(--border);
+    border-top: 4px solid var(--tone, var(--accent));
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+.card h2,
+.card h3 {
+    margin: 0 0 .6rem;
+    font-size: 1.05rem;
+    line-height: 1.3;
+}
+.card p { margin: .5rem 0 0; }
+.card p:not(.formula) { color: var(--muted); font-size: .95rem; }
+.formula {
+    display: block;
+    padding: .5rem .7rem;
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .85rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+/* Call to action linking the calculator and the FAQ */
+.cta {
+    margin-top: 3rem;
+    padding: 1.5rem;
+    border-radius: var(--radius);
+    background: var(--accent-soft);
+}
+.cta h2 { margin: 0 0 .4rem; font-size: 1.25rem; }
+.cta p { margin: 0 0 1rem; color: var(--muted); }
+.cta-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    padding: .5rem 1.25rem;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    text-decoration: none;
+}
+.cta-link:hover { background: var(--accent-dark); color: #fff; }
+
+/* Legal page */
+.legal .content-section { margin-top: 2rem; }
+.legal .content-section > h2 { font-size: 1.3rem; }
+.legal ul { padding-left: 1.2rem; }
+.legal li { margin-block: .4rem; }
+mark.todo {
+    padding: 0 .25rem;
+    border-radius: 4px;
+    background: #fff3bf;
+    color: var(--ink);
+}
+
+/* ---------- Footer ---------- */
+.site-footer {
+    margin-top: 2rem;
+    padding-block: 2rem;
+    background: var(--ink);
+    color: #b4bfd1;
+    font-size: .9rem;
+}
+.site-footer .container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: .75rem 1.5rem;
+}
+.site-footer p { margin: 0; }
+.site-footer nav { display: flex; gap: 1.25rem; }
+.site-footer a { color: #fff; }
+.site-footer a:hover { color: #cfe0ff; }

@@ -1,0 +1,9 @@
+twig:
+    file_name_pattern: '*.twig'
+    globals:
+        site_url: '%app.site_url%' # canonical / Open Graph / JSON-LD base, no trailing slash
+        features: '%app.features%' # see app.features in services.yaml
+
+when@test:
+    twig:
+        strict_variables: true

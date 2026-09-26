@@ -1,0 +1,91 @@
+{# Cost lines, in the same order as LINE_KEYS in assets/lib/cost-calculator.js. #}
+{% set lines = {
+    filament: 'Filament',
+    purge: 'Purge multicolore',
+    electricity: 'Électricité',
+    wear: 'Usure machine',
+    failure: 'Échecs',
+    labor: "Main d'œuvre",
+    extras: 'Extras',
+} %}
+
+<section class="result" aria-labelledby="result-title">
+    <div class="result-hero" aria-live="polite">
+        <h2 id="result-title">Résultat</h2>
+        <p class="hero-label">Prix de vente conseillé</p>
+        <p class="hero-price" data-calculator-target="price">–</p>
+        {% if features.advanced_mode %}
+        <div class="hero-micro" data-calculator-target="microRow" hidden>
+            <span>Prix à facturer (micro-entreprise)</span>
+            <strong data-calculator-target="invoice">–</strong>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="result-body">
+        <noscript><p class="alert">Le calcul en direct nécessite JavaScript.</p></noscript>
+        <p class="alert" role="alert" data-calculator-target="incomplete" hidden>
+            Certains champs sont invalides et comptés pour 0 : le résultat est incomplet.
+        </p>
+
+        <dl class="summary">
+            <div class="summary-row">
+                <dt>Coût total</dt>
+                <dd data-calculator-target="total">–</dd>
+            </div>
+            <div class="summary-row">
+                <dt>Marge</dt>
+                <dd data-calculator-target="margin">–</dd>
+            </div>
+            {% if features.advanced_mode %}
+            <div class="summary-row" data-calculator-target="microRow" hidden>
+                <dt>Cotisations</dt>
+                <dd data-calculator-target="contributions">–</dd>
+            </div>
+            {% endif %}
+        </dl>
+
+        <div class="breakdown">
+            <h3>Répartition du coût</h3>
+            <p class="hint" data-calculator-target="empty">Renseignez le poids et la durée pour voir la répartition.</p>
+
+            <div class="breakdown-body" data-calculator-target="breakdown" hidden>
+                <div class="donut-figure">
+                    {# Decorative: the legend below carries the same information for screen readers. #}
+                    <svg class="donut" viewBox="0 0 42 42" aria-hidden="true" focusable="false">
+                        <circle class="donut-track" cx="21" cy="21" r="15.9155"></circle>
+                        {% for key, label in lines %}
+                            <circle class="donut-segment donut-segment--{{ key }}" cx="21" cy="21" r="15.9155"
+                                    stroke-dasharray="0 100" data-calculator-target="segment" data-key="{{ key }}"></circle>
+                        {% endfor %}
+                    </svg>
+                    <div class="donut-center" aria-hidden="true">
+                        <span>Coût total</span>
+                        <strong data-calculator-target="total">–</strong>
+                    </div>
+                </div>
+
+                <ul class="legend">
+                    {% for key, label in lines %}
+                        <li data-calculator-target="line" data-key="{{ key }}" hidden>
+                            <span class="swatch swatch--{{ key }}" aria-hidden="true"></span>
+                            <span class="legend-label">{{ label }}</span>
+                            <span class="legend-amount" data-role="amount"></span>
+                            <span class="legend-share" data-role="share"></span>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <div class="share">
+            <button type="button" class="button" data-calculator-target="copyButton"
+                    data-action="calculator#copyLink" hidden>
+                <span class="button-label">Copier le lien</span>
+                <span class="button-done" aria-hidden="true">Lien copié ✓</span>
+            </button>
+            <p class="hint">Le lien reproduit tous vos paramètres : partagez-le ou gardez-le pour plus tard.</p>
+            <p class="visually-hidden" role="status" data-calculator-target="copyStatus"></p>
+        </div>
+    </div>
+</section>

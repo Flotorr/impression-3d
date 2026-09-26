@@ -1,0 +1,63 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Calculateur coût d'impression 3D — coût réel et prix de vente{% endblock %}
+{% block meta_description %}{% if features.advanced_mode %}Calculez gratuitement le coût réel d'une impression 3D (filament, électricité, usure, main d'œuvre) et le prix de vente conseillé, avec option micro-entreprise.{% else %}Calculez gratuitement le coût réel d'une impression 3D (filament et électricité) et obtenez un prix de vente conseillé selon votre marge.{% endif %}{% endblock %}
+
+{% block structured_data %}
+    {{ include('calculator/_jsonld.html.twig') }}
+{% endblock %}
+
+{% block body %}
+    <header class="site-header hero">
+        <div class="container hero-inner">
+            <div class="hero-text">
+                <h1>Calculateur de coût d'impression 3D</h1>
+                <p class="lead">
+                    {% if features.advanced_mode %}
+                        Calculez le coût réel d'une impression 3D (filament, électricité, usure, main d'œuvre…)
+                        et obtenez un prix de vente conseillé. Gratuit, sans inscription.
+                    {% else %}
+                        Calculez le coût réel d'une impression 3D (filament et électricité)
+                        et obtenez un prix de vente conseillé. Gratuit, sans inscription.
+                    {% endif %}
+                </p>
+                <ul class="chips">
+                    <li>Gratuit</li>
+                    <li>Sans inscription</li>
+                    <li>Calcul en direct</li>
+                    <li>Lien à partager</li>
+                </ul>
+            </div>
+        </div>
+    </header>
+
+    <main class="container" id="calculateur">
+        <div class="calculator" data-controller="calculator">
+            {{ include('calculator/_form.html.twig') }}
+            {{ include('calculator/_result.html.twig') }}
+
+            {# Small screens only: keeps the figures in view while filling the long form. #}
+            <div class="summary-bar">
+                <div>
+                    <span class="summary-bar-label">Coût</span>
+                    <strong data-calculator-target="total">–</strong>
+                </div>
+                <div>
+                    <span class="summary-bar-label">Prix conseillé</span>
+                    <strong data-calculator-target="price">–</strong>
+                </div>
+                <a href="#result-title">Détail</a>
+            </div>
+        </div>
+
+        <div class="content">
+            {{ include('calculator/_how_it_works.html.twig') }}
+
+            <aside class="cta" aria-labelledby="cta-title">
+                <h2 id="cta-title">Une question sur le calcul ?</h2>
+                <p>Prix de vente, marge, électricité, impressions ratées : consultez la foire aux questions.</p>
+                <a class="cta-link" href="{{ path('faq') }}">Voir la FAQ</a>
+            </aside>
+        </div>
+    </main>
+{% endblock %}

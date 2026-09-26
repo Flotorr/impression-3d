@@ -1,0 +1,119 @@
+{% import 'calculator/_fields.html.twig' as f %}
+
+<form class="calculator-form" novalidate
+      data-calculator-target="form"
+      data-action="input->calculator#update change->calculator#update submit->calculator#preventSubmit">
+    {% if features.advanced_mode %}
+    <fieldset class="mode-card">
+        <legend>Mode de calcul</legend>
+        <div class="segmented">
+            <label class="mode-option">
+                <input type="radio" name="mode" value="simple" checked>
+                <span><strong>Simple</strong><small>filament + électricité</small></span>
+            </label>
+            <label class="mode-option">
+                <input type="radio" name="mode" value="advanced">
+                <span><strong>Avancé</strong><small>tous les postes de coût</small></span>
+            </label>
+        </div>
+    </fieldset>
+    {% else %}
+        <input type="hidden" name="mode" value="simple">
+    {% endif %}
+
+    <fieldset data-tone="print">
+        <legend>Impression</legend>
+        {{ f.number('filamentWeightG', 'Poids de la pièce', 'g', defaults) }}
+        <div class="field-row">
+            {{ f.number('durationHours', 'Durée : heures', 'h', defaults) }}
+            {{ f.number('durationMinutes', 'Durée : minutes', 'min', defaults) }}
+        </div>
+    </fieldset>
+
+    <fieldset data-tone="filament">
+        <legend>Filament</legend>
+        <div class="field-row">
+            {{ f.number('spoolPriceEur', 'Prix de la bobine', '€', defaults) }}
+            {{ f.number('spoolWeightG', 'Poids de la bobine', 'g', defaults) }}
+        </div>
+        {% if features.advanced_mode %}
+        <div data-advanced>
+            {{ f.number('purgeG', 'Purge multicolore (optionnel)', 'g', defaults,
+                'Grammes de filament perdus en purge, comptés au prix du filament.') }}
+        </div>
+        {% endif %}
+    </fieldset>
+
+    <fieldset data-tone="electricity">
+        <legend>Électricité</legend>
+        <div class="field">
+            <label for="f-printer">Modèle d'imprimante</label>
+            <select id="f-printer" name="printer" data-action="change->calculator#applyPreset">
+                <option value="">Autre / personnalisée</option>
+                {% for printer in printers %}
+                    <option value="{{ printer.id }}"
+                            {% if printer.power_w is not null %}data-power="{{ printer.power_w }}"{% endif %}
+                            {% if printer.price_eur is not null %}data-price="{{ printer.price_eur }}"{% endif %}>
+                        {{ printer.name }}
+                    </option>
+                {% endfor %}
+            </select>
+            <p class="hint">{% if features.advanced_mode %}Préremplit la puissance moyenne et le prix de l'imprimante quand ils sont connus.{% else %}Préremplit la puissance moyenne quand elle est connue.{% endif %}</p>
+        </div>
+        <div class="field-row">
+            {{ f.number('powerW', 'Puissance moyenne', 'W', defaults) }}
+            {{ f.number('kwhPriceEur', 'Prix du kWh', '€', defaults) }}
+        </div>
+    </fieldset>
+
+    {% if features.advanced_mode %}
+    <div data-advanced>
+        <fieldset data-tone="wear">
+            <legend>Usure de la machine</legend>
+            <div class="field-row">
+                {{ f.number('printerPriceEur', "Prix de l'imprimante", '€', defaults) }}
+                {{ f.number('lifespanH', 'Durée de vie estimée', 'h', defaults) }}
+            </div>
+            {{ f.number('consumablesEurPerH', 'Consommables (optionnel)', '€/h', defaults,
+                'Buse, courroies, plateau… ramenés à l\'heure d\'impression.') }}
+        </fieldset>
+
+        <fieldset data-tone="failure">
+            <legend>Échecs</legend>
+            {{ f.number('failureRatePct', "Taux d'échec", '%', defaults,
+                'Appliqué au coût de production (filament, purge, électricité, usure).') }}
+        </fieldset>
+
+        <fieldset data-tone="labor">
+            <legend>Main d'œuvre</legend>
+            <div class="field-row">
+                {{ f.number('prepMin', 'Préparation', 'min', defaults) }}
+                {{ f.number('postMin', 'Post-traitement', 'min', defaults) }}
+            </div>
+            {{ f.number('hourlyRateEur', 'Taux horaire', '€/h', defaults) }}
+        </fieldset>
+
+        <fieldset data-tone="extras">
+            <legend>Extras</legend>
+            {{ f.number('extrasEur', 'Emballage, peinture, inserts…', '€', defaults) }}
+        </fieldset>
+    </div>
+    {% endif %}
+
+    <fieldset data-tone="price">
+        <legend>Prix de vente</legend>
+        {{ f.number('marginPct', 'Marge', '%', defaults,
+            'Majoration appliquée au coût total : 30 % sur un coût de 10 € donne 13 €.') }}
+
+        {% if features.advanced_mode %}
+        <div data-advanced>
+            <label class="check">
+                <input type="checkbox" name="microEnabled" {% if defaults.microEnabled %}checked{% endif %}>
+                Je suis en micro-entreprise
+            </label>
+            {{ f.number('microRatePct', 'Taux de cotisations', '%', defaults,
+                'Le prix à facturer est majoré pour que la marge reste intacte après cotisations.') }}
+        </div>
+        {% endif %}
+    </fieldset>
+</form>

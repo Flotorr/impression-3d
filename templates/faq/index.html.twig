@@ -1,0 +1,36 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}FAQ coût d'impression 3D : prix, marge, électricité{% endblock %}
+{% block meta_description %}Réponses aux questions fréquentes sur le coût d'une impression 3D : calcul du prix, marge, électricité, impressions ratées et micro-entreprise.{% endblock %}
+
+{% block structured_data %}
+    {{ include('faq/_jsonld.html.twig') }}
+{% endblock %}
+
+{% block body %}
+    <header class="site-header page-head">
+        <div class="container">
+            <h1>Questions fréquentes sur le coût d'une impression 3D</h1>
+            <p class="lead">Prix de vente, marge, électricité, impressions ratées : les réponses avant de lancer le calcul.</p>
+        </div>
+    </header>
+
+    <main class="container content">
+        <div class="prose">
+            <div class="cards cards--stack">
+                {% for item in faq %}
+                    <article class="card">
+                        <h2>{{ item.question }}</h2>
+                        <p>{{ item.answer }}</p>
+                    </article>
+                {% endfor %}
+            </div>
+
+            <aside class="cta" aria-labelledby="cta-title">
+                <h2 id="cta-title">Calculez le coût de votre impression</h2>
+                <p>Renseignez le poids, la durée et le prix de votre filament : le résultat s'affiche en direct.</p>
+                <a class="cta-link" href="{{ path('calculator') }}">Ouvrir le calculateur</a>
+            </aside>
+        </div>
+    </main>
+{% endblock %}

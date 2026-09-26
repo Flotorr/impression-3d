@@ -1,0 +1,53 @@
+# Calculator configuration: form defaults and printer presets.
+#
+# EVERYTHING BELOW MARKED "À VÉRIFIER" IS A PLACEHOLDER, NOT A REAL FIGURE.
+# Replace it with real values before publishing.
+#
+# Keys under `defaults` match the form field names (see assets/lib/cost-calculator.js).
+# Percentages are plain numbers (12 = 12 %). Decimals use a dot here (0.25).
+parameters:
+    calculator.defaults:
+        # --- Filament ---
+        filamentWeightG: 50           # À VÉRIFIER (placeholder: example piece weight)
+        spoolPriceEur: 20             # À VÉRIFIER (placeholder: price of a 1 kg spool)
+        spoolWeightG: 1000            # À VÉRIFIER (placeholder: standard 1 kg spool)
+        purgeG: 0                     # multicolor purge, extra grams of filament
+        # --- Duration ---
+        durationHours: 2              # À VÉRIFIER (placeholder: example print)
+        durationMinutes: 0
+        # --- Electricity ---
+        powerW: 100                   # À VÉRIFIER (placeholder: average power draw)
+        kwhPriceEur: 0.25             # À VÉRIFIER (placeholder: price per kWh)
+        # --- Machine wear ---
+        printerPriceEur: 0            # À VÉRIFIER (0 = ignore wear; presets may fill it)
+        lifespanH: 5000               # À VÉRIFIER (placeholder: estimated printer lifespan, hours)
+        consumablesEurPerH: 0         # nozzles, belts, build plates... in €/h
+        # --- Failures ---
+        failureRatePct: 5             # À VÉRIFIER (placeholder: share of failed prints)
+        # --- Labor ---
+        prepMin: 10                   # À VÉRIFIER (placeholder: preparation time)
+        postMin: 10                   # À VÉRIFIER (placeholder: post-processing time)
+        hourlyRateEur: 15             # À VÉRIFIER (placeholder: your hourly rate)
+        # --- Extras ---
+        extrasEur: 0                  # packaging, paint, inserts...
+        # --- Selling price ---
+        marginPct: 30                 # À VÉRIFIER (placeholder: markup on cost)
+        microEnabled: false
+        microRatePct: 12              # À VÉRIFIER (placeholder: social contribution rate, check yours)
+
+    # Printer presets shown in the dropdown. Selecting one fills average power and
+    # printer price. A `null` value means "do not fill this field".
+    # Only model names are provided: power_w and price_eur are intentionally empty
+    # and every entry is flagged `verify: true` until you fill in real figures
+    # (then set `verify: false`).
+    calculator.printers:
+        - { id: bambu-a1-mini,       name: 'Bambu Lab A1 mini',        power_w: null, price_eur: null, verify: true } # À VÉRIFIER
+        - { id: bambu-a1,            name: 'Bambu Lab A1',             power_w: null, price_eur: null, verify: true } # À VÉRIFIER
+        - { id: bambu-p1s,           name: 'Bambu Lab P1S',            power_w: null, price_eur: null, verify: true } # À VÉRIFIER
+        - { id: bambu-x1c,           name: 'Bambu Lab X1 Carbon',      power_w: null, price_eur: null, verify: true } # À VÉRIFIER
+        - { id: creality-ender3-v3-se, name: 'Creality Ender-3 V3 SE', power_w: null, price_eur: null, verify: true } # À VÉRIFIER
+        - { id: creality-k1c,        name: 'Creality K1C',             power_w: null, price_eur: null, verify: true } # À VÉRIFIER
+        - { id: prusa-mk4s,          name: 'Prusa MK4S',               power_w: null, price_eur: null, verify: true } # À VÉRIFIER
+        - { id: prusa-mini-plus,     name: 'Prusa MINI+',              power_w: null, price_eur: null, verify: true } # À VÉRIFIER
+        - { id: elegoo-neptune-4-pro, name: 'Elegoo Neptune 4 Pro',    power_w: null, price_eur: null, verify: true } # À VÉRIFIER
+        - { id: anycubic-kobra-2-pro, name: 'Anycubic Kobra 2 Pro',    power_w: null, price_eur: null, verify: true } # À VÉRIFIER

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fr">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        {% set canonical_url = site_url ~ path(app.current_route) %}
+        <title>{% block title %}Calculateur coût d'impression 3D — coût réel et prix de vente{% endblock %}</title>
+        <meta name="description" content="{% block meta_description %}Calculez gratuitement le coût réel d'une impression 3D et le prix de vente conseillé.{% endblock %}">
+        {# Canonical never carries the query string of shared links. #}
+        <link rel="canonical" href="{{ canonical_url }}">
+        <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+
+        <meta property="og:type" content="website">
+        <meta property="og:locale" content="fr_FR">
+        <meta property="og:site_name" content="flotor.fr">
+        <meta property="og:title" content="{{ block('title') }}">
+        <meta property="og:description" content="{{ block('meta_description') }}">
+        <meta property="og:url" content="{{ canonical_url }}">
+        <meta property="og:image" content="{{ site_url ~ asset('og-image.png') }}">
+        <meta property="og:image:width" content="1200">
+        <meta property="og:image:height" content="630">
+        <meta property="og:image:alt" content="Calculateur de coût d'impression 3D">
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="theme-color" content="#123f94">
+
+        {% block structured_data %}{% endblock %}
+        {% block javascripts %}
+            {% block importmap %}{{ importmap('app') }}{% endblock %}
+        {% endblock %}
+    </head>
+    <body>
+        <div class="topbar">
+            <div class="container topbar-inner">
+                <a class="brand" href="{{ path('calculator') }}">
+                    <svg class="brand-mark" viewBox="0 0 42 42" aria-hidden="true" focusable="false">
+                        <circle cx="21" cy="21" r="15.9155" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="6"/>
+                        <circle cx="21" cy="21" r="15.9155" fill="none" stroke="currentColor" stroke-width="6" stroke-dasharray="70 30" stroke-dashoffset="25" stroke-linecap="round"/>
+                    </svg>
+                    <span>flotor<span class="brand-tld">.fr</span></span>
+                </a>
+                <nav class="topbar-nav" aria-label="Navigation principale">
+                    <a href="{{ path('calculator') }}#how-title">Formules</a>
+                    <a href="{{ path('faq') }}">FAQ</a>
+                </nav>
+            </div>
+        </div>
+
+        {% block body %}{% endblock %}
+
+        <footer class="site-footer">
+            <div class="container">
+                <p>Les résultats sont indicatifs : ils dépendent des valeurs que vous saisissez.</p>
+                <nav aria-label="Pied de page">
+                    <a href="{{ path('calculator') }}">Calculateur</a>
+                    <a href="{{ path('faq') }}">FAQ</a>
+                    {% if features.legal_page %}<a href="{{ path('legal') }}">Mentions légales</a>{% endif %}
+                </nav>
+            </div>
+        </footer>
+    </body>
+</html>

@@ -1,0 +1,77 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Mentions légales — flotor.fr{% endblock %}
+{% block meta_description %}Mentions légales du site flotor.fr : éditeur, hébergeur, données personnelles et propriété intellectuelle.{% endblock %}
+
+{# Placeholders to fill in are wrapped in <mark class="todo">…</mark>. #}
+{% block body %}
+    <header class="site-header page-head">
+        <div class="container">
+            <h1>Mentions légales</h1>
+            <p class="lead"><a href="{{ path('calculator') }}">← Retour au calculateur</a></p>
+        </div>
+    </header>
+
+    <main class="container content">
+        <div class="prose legal">
+            <section class="content-section" aria-labelledby="editeur">
+                <h2 id="editeur">Éditeur du site</h2>
+                <ul>
+                    <li>Site : flotor.fr</li>
+                    <li>Nom ou dénomination sociale : <mark class="todo">[À COMPLÉTER : nom et prénom, ou raison sociale]</mark></li>
+                    <li>Statut : <mark class="todo">[À COMPLÉTER : ex. entrepreneur individuel / micro-entreprise, société…]</mark></li>
+                    <li>Numéro SIRET : <mark class="todo">[À COMPLÉTER]</mark></li>
+                    <li>Adresse : <mark class="todo">[À COMPLÉTER : adresse postale]</mark></li>
+                    <li>E-mail de contact : <mark class="todo">[À COMPLÉTER]</mark></li>
+                    <li>Téléphone : <mark class="todo">[À COMPLÉTER, si applicable]</mark></li>
+                    <li>TVA : <mark class="todo">[À COMPLÉTER : numéro de TVA intracommunautaire, ou « TVA non applicable, art. 293 B du CGI »]</mark></li>
+                    <li>Directeur de la publication : <mark class="todo">[À COMPLÉTER]</mark></li>
+                </ul>
+            </section>
+
+            <section class="content-section" aria-labelledby="hebergeur">
+                <h2 id="hebergeur">Hébergeur</h2>
+                <ul>
+                    <li>Nom : <mark class="todo">[À COMPLÉTER]</mark></li>
+                    <li>Adresse : <mark class="todo">[À COMPLÉTER]</mark></li>
+                    <li>Téléphone ou site web : <mark class="todo">[À COMPLÉTER]</mark></li>
+                </ul>
+            </section>
+
+            <section class="content-section" aria-labelledby="donnees">
+                <h2 id="donnees">Données personnelles et cookies</h2>
+                <p>
+                    Le calculateur fonctionne entièrement dans votre navigateur. Les valeurs que vous saisissez
+                    ne sont pas envoyées à un serveur ni enregistrées ; elles ne figurent que dans l'adresse de la page
+                    lorsque vous copiez le lien de partage.
+                </p>
+                <p>
+                    Ce site ne demande aucun compte et ne dépose aucun cookie de suivi ou de publicité.
+                    <mark class="todo">[À COMPLÉTER : mettez à jour ce paragraphe si vous ajoutez un outil de mesure d'audience,
+                    et précisez les journaux de connexion conservés par votre hébergeur.]</mark>
+                </p>
+                <p>
+                    Conformément au RGPD, vous disposez de droits d'accès, de rectification et d'effacement
+                    sur vos données : contactez l'éditeur à l'adresse indiquée ci-dessus.
+                </p>
+            </section>
+
+            <section class="content-section" aria-labelledby="responsabilite">
+                <h2 id="responsabilite">Responsabilité</h2>
+                <p>
+                    Les résultats du calculateur sont fournis à titre indicatif : ils dépendent des valeurs saisies
+                    et ne constituent ni un conseil fiscal, ni un conseil comptable. L'éditeur ne peut être tenu
+                    responsable des décisions prises à partir de ces résultats.
+                </p>
+            </section>
+
+            <section class="content-section" aria-labelledby="propriete">
+                <h2 id="propriete">Propriété intellectuelle</h2>
+                <p>
+                    Les textes, la mise en page et le code de ce site sont la propriété de l'éditeur, sauf mention contraire.
+                    <mark class="todo">[À COMPLÉTER : précisez les conditions de reproduction ou la licence, le cas échéant.]</mark>
+                </p>
+            </section>
+        </div>
+    </main>
+{% endblock %}

@@ -1,0 +1,12 @@
+{# FAQPage structured data. Same list as the visible questions, so text and markup always match. #}
+{% set faq_page = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    'mainEntity': faq|map(item => {
+        '@type': 'Question',
+        'name': item.question,
+        'acceptedAnswer': {'@type': 'Answer', 'text': item.answer},
+    }),
+} %}
+{# json_encode escapes "/" by default, so "</script>" can never appear in the output. #}
+<script type="application/ld+json">{{ faq_page|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }}</script>

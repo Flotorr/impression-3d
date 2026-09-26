@@ -1,0 +1,18 @@
+{# Structured data: WebApplication. The FAQPage markup lives on the FAQ page (faq/_jsonld.html.twig). #}
+{% set web_application = {
+    '@context': 'https://schema.org',
+    '@type': 'WebApplication',
+    'name': "Calculateur de coût d'impression 3D",
+    'url': site_url ~ path('calculator'),
+    'description': features.advanced_mode
+        ? "Calculez le coût réel d'une impression 3D (filament, électricité, usure, main d'œuvre) et obtenez un prix de vente conseillé."
+        : "Calculez le coût réel d'une impression 3D (filament et électricité) et obtenez un prix de vente conseillé.",
+    'applicationCategory': 'UtilitiesApplication',
+    'operatingSystem': 'Any',
+    'browserRequirements': 'Requires JavaScript',
+    'inLanguage': 'fr',
+    'isAccessibleForFree': true,
+    'offers': {'@type': 'Offer', 'price': '0', 'priceCurrency': 'EUR'},
+} %}
+{# json_encode escapes "/" by default, so "</script>" can never appear in the output. #}
+<script type="application/ld+json">{{ web_application|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }}</script>

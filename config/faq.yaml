@@ -1,0 +1,71 @@
+# FAQ page (/faq-impression-3d) AND its FAQPage JSON-LD (single source of truth).
+# Answers are plain text (no HTML) so the visible text and the structured data are identical.
+# `answer_simple` (optional) replaces `answer` while the advanced mode is switched off
+# (app.features.advanced_mode), so the text never describes fields that are not offered.
+parameters:
+    calculator.faq:
+        - question: "Comment calculer le coût d'une impression 3D ?"
+          answer: >-
+            Le coût d'une impression 3D additionne plusieurs postes : le filament utilisé
+            (poids de la pièce multiplié par le prix au gramme de la bobine), l'électricité
+            consommée pendant l'impression, l'usure de la machine, le temps de travail
+            (préparation et post-traitement) et les extras comme l'emballage ou la peinture.
+            À cela s'ajoute une provision pour les impressions ratées. Ce calculateur applique
+            ces postes en direct et affiche le détail de chacun.
+          answer_simple: >-
+            Le coût d'une impression 3D additionne plusieurs postes : le filament utilisé
+            (poids de la pièce multiplié par le prix au gramme de la bobine), l'électricité
+            consommée pendant l'impression et, selon votre situation, l'usure de la machine,
+            le temps de travail et les extras comme l'emballage. Ce calculateur additionne le
+            filament et l'électricité, puis applique votre marge pour proposer un prix de vente
+            conseillé.
+
+        - question: "Quel prix de vente choisir pour une pièce imprimée en 3D ?"
+          answer: >-
+            Partez du coût total, puis ajoutez une marge. Ici, la marge est une majoration
+            appliquée au coût : avec 30 % de marge, une pièce qui coûte 10 € est proposée à 13 €.
+            Comparez ensuite avec les prix pratiqués sur Etsy, Vinted ou par d'autres makers
+            pour des pièces similaires : le prix conseillé est un point de départ, pas une règle.
+
+        - question: "Comment tenir compte des impressions ratées ?"
+          answer: >-
+            Renseignez un taux d'échec en pourcentage. Il majore le coût de production
+            (filament, purge, électricité et usure), mais pas la main d'œuvre ni les extras.
+            Pour l'estimer, comptez sur une période donnée combien d'impressions ont été
+            à jeter par rapport au total : ce rapport est votre taux d'échec réel.
+          answer_simple: >-
+            Ce calculateur ne détaille pas le taux d'échec : pour couvrir les impressions ratées,
+            intégrez-le dans votre marge. Pour l'estimer, comptez sur une période donnée combien
+            d'impressions ont été à jeter par rapport au total : ce rapport est votre taux d'échec
+            réel. Il pèse surtout sur le coût du filament et de l'électricité.
+
+        - question: "Comment estimer la consommation électrique de mon imprimante ?"
+          answer: >-
+            Utilisez la puissance moyenne pendant l'impression, pas la puissance maximale
+            indiquée sur l'étiquette : le plateau chauffant et la buse ne chauffent pas en
+            continu. Le plus fiable est de brancher l'imprimante sur un wattmètre et de relever
+            la consommation d'une impression complète, puis de la diviser par sa durée.
+            Le prix du kWh figure sur votre facture d'électricité.
+
+        - question: "Comment tenir compte des cotisations en micro-entreprise ?"
+          answer: >-
+            En micro-entreprise, les cotisations sociales sont calculées sur le chiffre
+            d'affaires, pas sur le bénéfice. Pour conserver la marge voulue après cotisations,
+            le prix à facturer est le prix conseillé divisé par (1 moins le taux de cotisations).
+            Renseignez votre taux réel, qui dépend de votre activité : vérifiez-le auprès
+            de l'Urssaf. La TVA n'est pas prise en compte ; en franchise en base de TVA,
+            vous ne facturez pas de TVA.
+          answer_simple: >-
+            En micro-entreprise, les cotisations sociales sont calculées sur le chiffre
+            d'affaires, pas sur le bénéfice. Ce calculateur ne les intègre pas : pour conserver
+            la marge voulue après cotisations, divisez le prix conseillé par (1 moins le taux de
+            cotisations). Votre taux réel dépend de votre activité : vérifiez-le auprès de
+            l'Urssaf. La TVA n'est pas prise en compte ; en franchise en base de TVA, vous ne
+            facturez pas de TVA.
+
+        - question: "Puis-je partager ou sauvegarder mon calcul ?"
+          answer: >-
+            Oui. Tous vos paramètres sont enregistrés dans l'adresse de la page : le bouton
+            « Copier le lien » vous permet de la partager ou de la mettre en favori.
+            Le calcul se fait dans votre navigateur : aucun compte n'est nécessaire et
+            vos saisies ne sont pas enregistrées sur un serveur.

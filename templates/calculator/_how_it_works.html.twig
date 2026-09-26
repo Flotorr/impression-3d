@@ -1,0 +1,79 @@
+<section class="content-section" aria-labelledby="how-title">
+    <h2 id="how-title">Comment est calculé le coût ?</h2>
+    <p>
+        Chaque poste est calculé séparément, puis additionné. Les calculs se font dans votre navigateur
+        et les montants sont arrondis à deux décimales uniquement à l'affichage.
+        {% if features.advanced_mode %}
+            Le mode Simple ne prend en compte que le filament, l'électricité et la marge ;
+            le mode Avancé ajoute tous les autres postes.
+        {% else %}
+            Le calculateur additionne le filament et l'électricité, puis applique votre marge.
+        {% endif %}
+    </p>
+
+    <div class="cards">
+        <article class="card" data-tone="filament">
+            <h3>Filament{% if features.advanced_mode %} et purge{% endif %}</h3>
+            <p class="formula">poids de la pièce (g) × prix de la bobine (€) ÷ poids de la bobine (g)</p>
+            {% if features.advanced_mode %}
+                <p>
+                    La purge multicolore correspond aux grammes de filament perdus à chaque changement de couleur.
+                    Elle est comptée au même prix par gramme et apparaît sur sa propre ligne.
+                </p>
+            {% endif %}
+        </article>
+        <article class="card" data-tone="electricity">
+            <h3>Électricité</h3>
+            <p class="formula">puissance moyenne (W) × durée (h) ÷ 1000 × prix du kWh (€)</p>
+            <p>
+                Utilisez la puissance moyenne mesurée pendant l'impression, pas la puissance maximale de l'imprimante.
+            </p>
+        </article>
+        {% if features.advanced_mode %}
+            <article class="card" data-tone="wear">
+                <h3>Usure de la machine</h3>
+                <p class="formula">prix de l'imprimante (€) ÷ durée de vie estimée (h) × durée (h)</p>
+                <p>
+                    Les consommables (buse, courroies, plateau…), exprimés en €/h, s'ajoutent à ce montant.
+                </p>
+            </article>
+        {% endif %}
+        {% if features.advanced_mode %}
+            <article class="card" data-tone="failure">
+                <h3>Taux d'échec</h3>
+                <p class="formula">coût de production × taux d'échec (%)</p>
+                <p>
+                    Le coût de production regroupe le filament, la purge, l'électricité et l'usure.
+                    Avec 5 % d'échec, un coût de production de 10 € ajoute 0,50 €.
+                    Le taux d'échec ne s'applique ni à la main d'œuvre ni aux extras.
+                </p>
+            </article>
+        {% endif %}
+        {% if features.advanced_mode %}
+            <article class="card" data-tone="labor">
+                <h3>Main d'œuvre et extras</h3>
+                <p class="formula">(préparation + post-traitement, en min) ÷ 60 × taux horaire (€/h)</p>
+                <p>
+                    Les extras (emballage, peinture, inserts…) sont un montant libre ajouté tel quel.
+                </p>
+            </article>
+        {% endif %}
+        <article class="card" data-tone="price">
+            <h3>Marge et prix de vente conseillé</h3>
+            <p class="formula">prix conseillé = coût total × (1 + marge %)</p>
+            <p>
+                La marge est une majoration du coût total : 30 % sur un coût de 10 € donnent un prix conseillé de 13 €.
+            </p>
+        </article>
+        {% if features.advanced_mode %}
+            <article class="card" data-tone="micro">
+                <h3>Micro-entreprise</h3>
+                <p class="formula">prix à facturer = prix conseillé ÷ (1 − taux de cotisations %)</p>
+                <p>
+                    Les cotisations d'une micro-entreprise portent sur le chiffre d'affaires. En facturant ce montant,
+                    il vous reste le prix conseillé une fois les cotisations payées. La TVA n'est pas incluse.
+                </p>
+            </article>
+        {% endif %}
+    </div>
+</section>

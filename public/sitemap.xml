@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>https://flotor.fr/calculateur-cout-impression-3d</loc>
+        <changefreq>monthly</changefreq>
+        <priority>1.0</priority>
+    </url>
+    <url>
+        <loc>https://flotor.fr/faq-impression-3d</loc>
+        <changefreq>monthly</changefreq>
+        <priority>0.7</priority>
+    </url>
+    <!-- Re-enable with app.features.legal_page in config/services.yaml:
+    <url>
+        <loc>https://flotor.fr/mentions-legales</loc>
+        <changefreq>yearly</changefreq>
+        <priority>0.1</priority>
+    </url>
+    -->
+</urlset>
