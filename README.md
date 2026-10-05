@@ -1,86 +1,111 @@
-# Calculateur de coût d'impression 3D (flotor.fr)
+# Bac à sable 3D : sable et eau (flotor.fr)
 
-Calculateur gratuit du coût réel d'une impression 3D et du prix de vente conseillé.
-Symfony 8.1 + Twig, AssetMapper, Stimulus. Pas de base de données, pas de compte, pas de build Node.
+Démo technique : un bac à sable en verre où l'on creuse, entasse et pousse le sable, sculpte l'argile et la roche,
+verse de la lave, pendant que l'eau s'écoule, remplit les creux et creuse des rivières. Toute la physique tourne sur la carte graphique (WebGL 2).
+Symfony 8.1 + Twig, AssetMapper, Stimulus, Three.js (importmap, pas de build Node). Pas de base de données.
 
 ## Lancer en local
 
 ```bash
-composer install                    # télécharge aussi Stimulus dans assets/vendor/ (non versionné)
+composer install                    # télécharge aussi Stimulus et Three.js dans assets/vendor/ (non versionné)
 symfony server:start                # ou : php -S 127.0.0.1:8000 -t public
 ```
 
-Page : <http://127.0.0.1:8000/> (redirige vers `/calculateur-cout-impression-3d`).
-PHP 8.4+ requis.
+Page : <http://127.0.0.1:8000/>. PHP 8.4+ et un navigateur avec WebGL 2 requis.
 
 ## Tests
 
 ```bash
-npm test            # module de calcul et libs JS (node --test, aucune dépendance)
-php bin/phpunit     # smoke tests SEO (H1 unique, canonical, JSON-LD, sitemap…)
+npm test            # constantes physiques, outils, sources, coordonnées (node --test, aucune dépendance)
+php bin/phpunit     # page, SEO (canonical, meta, JSON-LD, sitemap), redirections, Umami, Search Console
 ```
 
 ## Où modifier quoi
 
 | Je veux… | Fichier |
 | --- | --- |
-| Changer les valeurs par défaut du formulaire | `config/calculator.yaml` (`calculator.defaults`) |
-| Renseigner les imprimantes (puissance, prix) | `config/calculator.yaml` (`calculator.printers`), puis passer `verify` à `false` |
-| Modifier la FAQ (page `/faq-impression-3d` + JSON-LD `FAQPage`) | `config/faq.yaml` (texte brut, sans HTML) ; variantes `answer_simple` tant que le mode Avancé est désactivé |
-| Changer le domaine (canonical, Open Graph) | `app.site_url` dans `config/services.yaml` |
+| Régler la physique (angles de talus, érosion, pluie, sources, argile, roche, lave, pas de temps) | `PHYSICS` dans `assets/lib/sand-physics.js` |
+| Ajouter ou modifier un outil | `TOOLS` dans `assets/lib/sand-physics.js` (mode et débit), puis le mode dans les shaders de pinceau |
+| Modifier la simulation (eau, lave, éboulements, érosion) | `assets/lib/sand-sim-shaders.js` (GLSL) et `assets/lib/sand-sim.js` (enchaînement des passes) |
+| Modifier le rendu (sable, eau, coupe vue à travers la vitre, verre, pluie, cascade, flaque) | `assets/lib/sand-render-shaders.js` |
+| Vitres (survol du marteau, éclats, flaques), gouttes de pluie, cascade, vapeur | `assets/lib/sand-effects.js` |
+| Objets flottants (modèles, physique sur GPU, nombre maximal) | `assets/lib/sand-objects.js`, `OBJECT_TYPES` et `MAX_OBJECTS` dans `sand-physics.js` |
+| Caméra, bac, éclairage, interaction souris / tactile | `assets/lib/sand-scene.js` |
+| Barre d'outils, réglages, raccourcis, capture | `assets/controllers/sandbox_controller.js`, `templates/sandbox/index.html.twig` |
+| Image de partage (Open Graph, 1200 × 630) | `public/og-image.png` |
 | Compléter les mentions légales | `templates/legal/mentions.html.twig` (repérer les `[À COMPLÉTER]`) |
-| Adapter le sitemap / robots | `public/sitemap.xml`, `public/robots.txt` (domaine écrit en dur) |
-| Changer une formule | `assets/lib/cost-calculator.js` + ses tests (`tests/js/`) |
 
-**À FAIRE avant la mise en ligne** : toutes les valeurs marquées `# À VÉRIFIER` dans `config/calculator.yaml`
-sont des valeurs de départ, pas des chiffres réels ; les puissances et prix d'imprimantes sont volontairement vides
-(`null` = le champ n'est pas prérempli) ; les mentions légales contiennent des champs à compléter ;
-relire la FAQ (questions fiscales, page `/faq-impression-3d`) ; vérifier le JSON-LD avec le test des résultats enrichis de Google.
+## Fonctionnement
+
+La grille fait 256 × 256 cellules ; chaque état est une texture flottante (RGBA) mise à jour par des passes plein écran.
+Chaque colonne est une pile : roche au fond, puis argile, puis sable (texture `terrain`), avec la lave puis l'eau par-dessus.
+Par image : pinceau (sable, puis eau, sources et pluie), puis 1 à 8 sous-pas de 4 ms. Les passes de l'eau tournent
+sur leur propre horloge (curseur « Vitesse de l'eau », ×0,25 à ×3) : en dessous de 1 elles sautent des sous-pas,
+au-dessus elles tournent plusieurs fois par sous-pas, sans jamais changer le pas de temps (le schéma reste stable).
+
+1. **Éboulements** : chaque cellule compare sa hauteur à ses 8 voisines (diagonales à √2). Au-delà de l'angle de talus
+   (sec 32°, humide jusqu'à 50°, sous l'eau 25°), elle cède la moitié du plus grand excédent, réparti selon la pente :
+   la masse est conservée exactement et les tas forment des cônes ronds. Seul le sable s'éboule : l'argile garde
+   la forme qu'on lui donne, la roche ne bouge jamais.
+1. **Lave** : le même modèle de tuyaux que l'eau, mais visqueux (fluidité × température²) ; elle transporte sa chaleur,
+   refroidit en une quarantaine de secondes à l'air, presque aussitôt dans l'eau (avec de la vapeur), puis durcit
+   en roche, qui englobe le sable et l'argile qu'elle recouvrait.
+2. **Eau** (modèle des « tuyaux virtuels », Mei et al. 2007) : le débit vers chaque voisine augmente avec la différence
+   de niveau sable + eau, limité à l'eau disponible ; la hauteur et la vitesse s'en déduisent. Les vitres sont des murs.
+3. **Érosion** : la capacité de transport croît avec la pente et la vitesse ; l'eau arrache le sable, puis l'argile
+   (sept fois plus lentement), jamais la roche ; elle redépose du sable, et le sédiment est transporté avec le courant.
+4. **Humidité** : le sable mouillé est plus sombre, tient plus raide, sèche lentement.
+
+L'eau est conservée : elle ne disparaît jamais d'elle-même (ni évaporation ni infiltration), seulement par l'éponge
+ou par une vitre cassée. La pluie remplit donc peu à peu le bac.
+
+Panneau « Vider / remplir » : retirer le sable, la lave ou l'eau, « Bac vide » (tout retirer, roche comprise) et
+« Remplir d'eau » (niveau `fillLevel`, environ la moitié des vitres : plus profond, les vagues iraient trop vite pour
+le pas de temps). « Bac vide » puis « Remplir d'eau » donne un bac rempli d'eau seulement, où les objets flottent.
+
+**Pluie** : des gouttes (segments animés dans le vertex shader) tombent du ciel en biais et s'arrêtent là où elles
+rencontrent le sable ou l'eau, lus dans les textures de la simulation ; des ronds se forment sur l'eau et le ciel
+s'assombrit. **Marteau** : un clic sur une vitre la brise (éclats qui tombent sur la table). De ce côté, la simulation
+ouvre le bord sur l'extérieur : l'eau se déverse (particules en cascade) et le sable s'écoule jusqu'à retrouver sa pente.
+Une flaque grandit sur la table, à partir des profondeurs lues sur le bord toutes les 10 images.
+
+**Objets flottants** : leur état (position, vitesse, cap) tient dans une petite texture mise à jour sur le GPU. À flot,
+chaque objet prend la vitesse de l'eau sous lui et glisse le long de la pente de la surface ; échoué, il s'arrête ;
+les objets se repoussent et rebondissent sur les vitres. Par une vitre cassée, ils sortent avec l'eau, tombent
+en chute libre et restent sur le socle en bois ou sur la table. Le rendu (maillages instanciés) lit cette texture dans le
+vertex shader pour poser chaque objet sur l'eau, incliné avec la surface : rien n'est relu côté CPU.
+
+**Océan en direct** : une ville côtière est géocodée puis sa houle du moment est demandée à Open-Meteo, depuis le
+navigateur (API gratuite pour un usage non commercial, sans clé ; attribution CC BY 4.0 affichée sur la fiche). Le bac
+devient une plage et une rangée de cellules au fond pousse la houle comme le batteur d'un bassin à houle. Tout est à
+l'échelle du surfeur (1,75 m, `OCEAN.metre`) : hauteurs et longueurs × `metre`, durées × √`metre` (similitude de
+Froude). Rafraîchi toutes les 15 minutes. Ce sont des données de modèles de vagues, pas de mesures de bouées.
+
+La souris vise le terrain en lisant sur le GPU la hauteur sous le pointeur (deux allers-retours). Le rendu s'arrête
+quand le bac sort de l'écran ou que l'onglet est masqué. Sans `EXT_color_buffer_float`, la simulation passe en
+demi-précision (moins fine pour l'érosion).
+
+Commandes : clic gauche ou un doigt pour l'outil, clic droit ou deux doigts pour tourner, molette ou pincement pour
+zoomer vers le point sous le pointeur. Les outils sont en colonne à gauche (en bas sur téléphone). Raccourcis `1` à `9`, `0` et `O` (objets) pour les onze outils, `[` et `]` pour la taille. La pelle (« Creuser ») retire
+le sable, mord plus lentement dans l'argile et à peine dans la roche.
+
+Les anciennes URL du calculateur (`/calculateur-cout-impression-3d`, `/faq-impression-3d`) redirigent en 301 vers `/`.
 
 ## Fonctionnalités désactivées (interrupteurs)
 
-`app.features` dans `config/services.yaml` :
-
-| Interrupteur | Off (actuel) | On |
-| --- | --- | --- |
-| `advanced_mode` | Mode Simple uniquement (filament + électricité + marge). Formulaire, résultat, formules, FAQ, meta description et JSON-LD n'annoncent que ce qui existe. | Mode Avancé complet et option micro-entreprise. |
-| `legal_page` | `/mentions-legales` répond 404 et le lien du pied de page disparaît. | Page et lien réactivés. |
-
-Rien n'a été supprimé : le code du mode Avancé (`assets/lib/cost-calculator.js`, tests inclus) reste en place.
-Pour réactiver la page légale, décommenter aussi son `<url>` dans `public/sitemap.xml` (le test PHPUnit le vérifie).
+`app.features` dans `config/services.yaml` : `legal_page` (off : `/mentions-legales` répond 404 et le lien du pied
+de page disparaît). Pour la réactiver, décommenter aussi son `<url>` dans `public/sitemap.xml` (le test PHPUnit le vérifie).
 Après changement en production : `APP_ENV=prod php bin/console cache:clear`.
-Un ancien lien partagé en mode Avancé reste lisible : les champs devenus inutiles sont ignorés.
 
 ## Mesure d'audience (Umami)
 
 Umami Cloud, sans cookie (pas de bandeau de consentement). Actif seulement si `UMAMI_WEBSITE_ID` est renseigné,
-dans `.env.prod` : le dev et les tests n'envoient rien. Le suivi automatique est coupé, car le calculateur réécrit l'URL
-à chaque saisie ; une seule page vue est envoyée, sans query string (les liens de partage contiennent les valeurs saisies).
-Événements : `calcul` (une fois par visite, au premier changement), `lien-partage`, `imprimante` (modèle choisi).
+dans `.env.prod` : le dev et les tests n'envoient rien. Une seule page vue, sans query string.
+Événements : `outil` (`nom` de l'outil choisi), `objet` (premier objet posé), `pluie`, `vitre-cassee` (`cote`), `bac-vide`, `remplir`, `ocean` (`ville`), `nouvelles-dunes`, `capture-png`.
 Le paragraphe correspondant des mentions légales s'affiche automatiquement quand Umami est actif.
 
 Google Search Console (propriété « Préfixe d'URL », méthode « Balise HTML ») : mettre la valeur `content` de la balise
 dans `GOOGLE_SITE_VERIFICATION` (`.env.prod`) ; la balise `<meta name="google-site-verification">` est alors ajoutée à toutes les pages.
-
-## Architecture
-
-- `assets/lib/cost-calculator.js` : calcul pur, sans DOM, sans arrondi (l'arrondi est uniquement à l'affichage).
-  Autres modules purs : `number-format.js` (virgule décimale, `Intl.NumberFormat('fr-FR')`), `share-params.js`
-  (état ⇄ query string), `donut.js` (géométrie de l'anneau), `messages.js` (messages d'erreur en français).
-- `assets/controllers/calculator_controller.js` : Stimulus, lit le formulaire, appelle les libs, met à jour le DOM.
-- Pages : `/calculateur-cout-impression-3d` (JSON-LD `WebApplication`), `/faq-impression-3d` (JSON-LD `FAQPage`),
-  `/mentions-legales` (désactivée), `/` redirige vers le calculateur. `src/Faq/FaqProvider.php` prépare la FAQ.
-- Le formulaire, les résultats et les textes SEO sont rendus côté serveur (Twig) ; le JS ne fait que mettre à jour.
-- Le lien de partage sérialise tous les paramètres dans la query string ; le `canonical` ne la contient jamais.
-
-### Règles de calcul (choix par défaut)
-
-- Filament : `g × prix bobine ÷ poids bobine` ; la purge est comptée au même prix par gramme.
-- Taux d'échec : `coût de production × taux`, avec production = filament + purge + électricité + usure
-  (ni main d'œuvre ni extras).
-- Marge : majoration sur le coût, `prix conseillé = coût total × (1 + marge)`.
-- Micro-entreprise : `prix à facturer = prix conseillé ÷ (1 − taux de cotisations)`. La TVA n'est pas gérée.
-- Mode Simple : filament + électricité + marge ; les champs avancés sont ignorés.
 
 ## Déploiement
 
@@ -98,8 +123,5 @@ APP_ENV=prod php bin/console cache:clear
 ```
 
 Le serveur web doit pointer sur `public/`. Activer la compression (gzip/brotli) et un cache long sur `/assets/*`
-(les fichiers ont un hash dans leur nom). Après un changement de code, relancer `asset-map:compile`.
+(les fichiers ont un hash dans leur nom) : Three.js pèse environ 750 Ko non compressé.
 Ne pas laisser `public/assets/` sur une machine de développement : il masque les assets en cours de modification.
-
-Poids mesuré en production : environ 24 Ko de JS et CSS en gzip (dont Stimulus, 11 Ko) et 6 Ko de HTML.
-Aucune ressource externe.

@@ -6,19 +6,12 @@
 
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
-imports:
-    - { resource: calculator.yaml } # form defaults and printer presets
-    - { resource: faq.yaml }        # FAQ shown on the page and in the FAQPage JSON-LD
-
 parameters:
     # Public origin of the site. Always used for canonical URLs, whatever host serves the page.
     app.site_url: 'https://flotor.fr'
 
     # Feature switches. Set to true to bring a feature back; nothing is deleted when off.
     app.features:
-        # Advanced mode: purge, machine wear, failure rate, labor, extras, micro-entreprise.
-        # Off = the calculator is Simple only (filament + electricity + margin).
-        advanced_mode: false
         # /mentions-legales page and its footer link. Off = the URL answers 404.
         # Also re-add its <url> entry to public/sitemap.xml when turning it on.
         legal_page: false

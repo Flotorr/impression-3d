@@ -26,4 +26,7 @@ return [
     'app' => ['path' => './assets/app.js', 'entrypoint' => true],
     '@hotwired/stimulus' => ['version' => '3.2.2'],
     '@symfony/stimulus-bundle' => ['path' => '@symfony/stimulus-bundle/loader.js'],
+    'three' => ['version' => '0.186.1'],
+    'three/addons/controls/OrbitControls.js' => ['version' => '0.186.1'],
+    'three/addons/utils/BufferGeometryUtils.js' => ['version' => '0.186.1'],
 ];

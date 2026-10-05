@@ -1,0 +1,175 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Bac à sable 3D : sable et eau en temps réel — flotor.fr{% endblock %}
+{% block meta_description %}Creusez, entassez et poussez le sable : l'eau coule, remplit les creux et creuse des rivières. Une simulation physique en 3D, directement dans votre navigateur.{% endblock %}
+{% block canonical %}{{ site_url ~ path('home') }}{% endblock %}
+{% block body_class %}page-sandbox{% endblock %}
+
+{% block structured_data %}
+    <script type="application/ld+json">
+        {{ {
+            '@context': 'https://schema.org',
+            '@type': 'WebApplication',
+            name: 'Bac à sable 3D : sable et eau',
+            url: site_url ~ path('home'),
+            applicationCategory: 'EntertainmentApplication',
+            operatingSystem: 'Navigateur web avec WebGL 2',
+            inLanguage: 'fr',
+            isAccessibleForFree: true,
+            offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' },
+        }|json_encode(constant('JSON_UNESCAPED_SLASHES') b-or constant('JSON_UNESCAPED_UNICODE'))|raw }}
+    </script>
+{% endblock %}
+
+{% block body %}
+    <main>
+        <section class="stage" aria-labelledby="stage-title" data-controller="sandbox">
+            <div class="stage-viewport" data-sandbox-target="viewport"></div>
+
+            {# Hidden on screen, kept for search engines and screen readers. #}
+            <h1 id="stage-title" class="visually-hidden">Bac à sable : sable et eau en temps réel</h1>
+
+            <div class="hud hud-tools" role="toolbar" aria-label="Outils" data-sandbox-target="tools"></div>
+
+            <aside class="hud hud-panel" id="sandbox-settings" aria-label="Réglages">
+                <div class="control">
+                    <label for="brush-size">Taille</label>
+                    <input type="range" id="brush-size" min="0" max="100" value="35" data-sandbox-target="size" data-action="input->sandbox#setSize">
+                </div>
+                <div class="control">
+                    <label for="brush-strength">Force</label>
+                    <input type="range" id="brush-strength" min="5" max="100" value="60" data-sandbox-target="strength" data-action="input->sandbox#setStrength">
+                </div>
+                <div class="control">
+                    <label for="object-type">Objet à poser</label>
+                    <select id="object-type" data-sandbox-target="objectType" data-action="sandbox#setObjectType"></select>
+                </div>
+                <div class="control">
+                    <label for="water-speed">Vitesse de l'eau <output for="water-speed" data-sandbox-target="waterSpeedOutput">×1,00</output></label>
+                    <input type="range" id="water-speed" min="25" max="300" step="5" value="100" data-sandbox-target="waterSpeed" data-action="input->sandbox#setWaterSpeed">
+                </div>
+                <label class="switch">
+                    <input type="checkbox" data-sandbox-target="rain" data-action="sandbox#toggleRain">
+                    <span>Pluie</span>
+                </label>
+                <label class="switch">
+                    <input type="checkbox" checked data-sandbox-target="erosion" data-action="sandbox#toggleErosion">
+                    <span>Érosion</span>
+                </label>
+                <p class="panel-title">Océan en direct</p>
+                <form class="ocean-form" data-action="submit->sandbox#loadOcean">
+                    <label class="visually-hidden" for="ocean-city">Ville côtière</label>
+                    <input type="search" id="ocean-city" placeholder="Ville côtière (ex. Biarritz)" autocomplete="off" required data-sandbox-target="city">
+                    <button type="submit" class="btn" data-sandbox-target="oceanSubmit">Charger</button>
+                </form>
+                <div class="ocean-card" data-sandbox-target="oceanCard" hidden>
+                    <p class="ocean-place" data-sandbox-target="oceanPlace"></p>
+                    <dl class="ocean-facts" data-sandbox-target="oceanFacts"></dl>
+                    <p class="ocean-note">À l'échelle du surfeur (1,75 m). Mis à jour toutes les 15 minutes.
+                        Données <a href="https://open-meteo.com/" rel="noopener" target="_blank">Open-Meteo</a> (CC BY 4.0), issues de modèles de vagues.</p>
+                    <button type="button" class="link-button" data-action="sandbox#stopOcean">Arrêter la houle</button>
+                </div>
+                <p class="panel-title">Vider / remplir</p>
+                <div class="panel-actions">
+                    <button type="button" class="btn" data-action="sandbox#clearSand">Retirer le sable</button>
+                    <button type="button" class="btn" data-action="sandbox#clearLava">Retirer la lave</button>
+                    <button type="button" class="btn" data-action="sandbox#drain">Vider l'eau</button>
+                    <button type="button" class="btn" data-action="sandbox#fillWater">Remplir d'eau</button>
+                    <button type="button" class="btn" data-action="sandbox#emptyTank">Bac vide</button>
+                    <button type="button" class="btn" data-action="sandbox#newDunes">Nouvelles dunes</button>
+                </div>
+                <p class="panel-title">Bac</p>
+                <div class="panel-actions">
+                    <button type="button" class="btn" data-action="sandbox#clearSprings" data-sandbox-target="springs">Aucune source</button>
+                    <button type="button" class="btn" data-action="sandbox#repairPanes" data-sandbox-target="repair">Vitres intactes</button>
+                    <button type="button" class="btn" data-action="sandbox#clearObjects" data-sandbox-target="clearObjects">Aucun objet</button>
+                    <button type="button" class="btn" data-action="sandbox#download">Capture PNG</button>
+                </div>
+                <p class="panel-hint">
+                    Clic gauche ou un doigt : outil. Clic droit ou deux doigts : tourner. Molette ou pincement : zoom vers le pointeur.
+                    <span class="hint-keys"><kbd>1</kbd>–<kbd>0</kbd> et <kbd>O</kbd> outils, <kbd>[</kbd> <kbd>]</kbd> taille.</span>
+                </p>
+            </aside>
+
+            <button type="button" class="hud btn btn-panel" data-action="sandbox#togglePanel" data-sandbox-target="panelToggle"
+                    aria-controls="sandbox-settings" aria-expanded="false">Réglages</button>
+
+            <p class="toast" data-sandbox-target="toast" role="status" aria-live="polite"></p>
+
+            <div class="stage-fallback" data-sandbox-target="fallback" hidden>
+                <p>Votre navigateur ou votre appareil ne prend pas en charge WebGL 2 : la simulation ne peut pas démarrer.</p>
+            </div>
+            <noscript><div class="stage-fallback"><p>Le bac à sable a besoin de JavaScript pour fonctionner.</p></div></noscript>
+        </section>
+
+        <section class="about" id="a-propos" aria-labelledby="about-title">
+            <h2 id="about-title">Comment ça marche ?</h2>
+            <div class="about-grid">
+                <article>
+                    <h3>L'eau suit le terrain</h3>
+                    <p>
+                        Le bac est découpé en 65 536 colonnes. Entre deux colonnes voisines, l'eau circule comme dans un tuyau :
+                        plus la différence de niveau est grande, plus le débit augmente. C'est le modèle des « tuyaux virtuels »,
+                        une méthode classique pour simuler les eaux peu profondes. Dès que le sable bouge, l'eau se réorganise.
+                    </p>
+                </article>
+                <article>
+                    <h3>Le sable s'éboule</h3>
+                    <p>
+                        Un tas de sable sec ne tient pas au-delà d'environ 32° : au-delà, les grains glissent vers le bas.
+                        Le sable mouillé se tient jusqu'à 50°, c'est pour cela qu'on fait les châteaux avec du sable humide.
+                        Sous l'eau, il s'affaisse dès 25°.
+                    </p>
+                </article>
+                <article>
+                    <h3>Roche, argile et lave</h3>
+                    <p>
+                        Chaque colonne du bac est une pile : roche au fond, puis argile, puis sable. La roche ne bouge pas,
+                        l'argile garde la forme qu'on lui donne et résiste à l'eau : de quoi bâtir des barrages. La lave coule
+                        comme un liquide épais, refroidit en quelques dizaines de secondes et durcit en roche ; dans l'eau,
+                        elle se fige presque aussitôt dans un nuage de vapeur.
+                    </p>
+                </article>
+                <article>
+                    <h3>Des objets qui flottent</h3>
+                    <p>
+                        Canard, bateau en papier, feuille, bûche ou ballon : posés sur l'eau, ils dérivent avec le courant,
+                        tanguent, s'écartent les uns des autres et s'échouent quand l'eau se retire. Leur mouvement est
+                        calculé sur la carte graphique, à partir de la vitesse de l'eau sous chacun d'eux.
+                    </p>
+                </article>
+                <article>
+                    <h3>La houle d'une vraie plage</h3>
+                    <p>
+                        Tapez une ville côtière : le bac devient une plage et reçoit la houle mesurée là-bas par les modèles
+                        d'Open-Meteo. Tout est à l'échelle du surfeur, qui mesure 1,75 m : une houle d'un mètre lui arrive
+                        aux hanches. Comme dans les bassins à houle des laboratoires, les durées sont réduites dans le même
+                        rapport que les longueurs (similitude de Froude), pour que les vagues gardent leurs proportions.
+                    </p>
+                </article>
+                <article>
+                    <h3>L'eau creuse son lit</h3>
+                    <p>
+                        Une eau rapide arrache du sable et le transporte ; quand elle ralentit, elle le dépose. Posez une source
+                        en haut d'une dune : la rivière creuse peu à peu son lit et forme un delta en arrivant dans le lac.
+                    </p>
+                </article>
+                <article>
+                    <h3>Cassez la vitre</h3>
+                    <p>
+                        Avec le marteau, cliquez sur une vitre : elle vole en éclats. De ce côté, l'eau se déverse en cascade
+                        et forme une flaque sur la table, et le sable s'écoule jusqu'à retrouver sa pente naturelle.
+                    </p>
+                </article>
+                <article>
+                    <h3>Tout tourne sur la carte graphique</h3>
+                    <p>
+                        La simulation est écrite en shaders GLSL : des centaines de milliers de calculs par image, en parallèle.
+                        Le sable sèche lentement, la pluie tombe du ciel et fait des ronds dans l'eau, et la lumière forme des reflets
+                        mouvants au fond. Le curseur « Vitesse de l'eau » fait tourner la simulation de l'eau plus ou moins souvent.
+                    </p>
+                </article>
+            </div>
+        </section>
+    </main>
+{% endblock %}

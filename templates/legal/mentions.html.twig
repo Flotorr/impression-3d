@@ -5,14 +5,12 @@
 
 {# Placeholders to fill in are wrapped in <mark class="todo">…</mark>. #}
 {% block body %}
-    <header class="site-header page-head">
-        <div class="container">
-            <h1>Mentions légales</h1>
-            <p class="lead"><a href="{{ path('calculator') }}">← Retour au calculateur</a></p>
-        </div>
+    <header class="page-head">
+        <h1>Mentions légales</h1>
+        <p class="lead"><a href="{{ path('home') }}">← Retour au bac à sable</a></p>
     </header>
 
-    <main class="container content">
+    <main class="content">
         <div class="prose legal">
             <section class="content-section" aria-labelledby="editeur">
                 <h2 id="editeur">Éditeur du site</h2>
@@ -41,9 +39,10 @@
             <section class="content-section" aria-labelledby="donnees">
                 <h2 id="donnees">Données personnelles et cookies</h2>
                 <p>
-                    Le calculateur fonctionne entièrement dans votre navigateur. Les valeurs que vous saisissez
-                    ne sont pas envoyées à un serveur ni enregistrées ; elles ne figurent que dans l'adresse de la page
-                    lorsque vous copiez le lien de partage.
+                    Le bac à sable fonctionne entièrement dans votre navigateur. Ce que vous y faites
+                    n'est ni envoyé à un serveur ni enregistré. Si vous utilisez « Océan en direct », le nom de la ville saisie
+                    est envoyé par votre navigateur au service <a href="https://open-meteo.com/">Open-Meteo</a>, qui renvoie
+                    ses coordonnées et la houle du moment.
                 </p>
                 <p>
                     Ce site ne demande aucun compte et ne dépose aucun cookie de suivi ou de publicité.
@@ -53,22 +52,13 @@
                     <p>
                         La fréquentation est mesurée avec Umami, un outil de mesure d'audience sans cookie qui ne conserve
                         pas votre adresse IP et ne vous suit pas d'un site à l'autre. Il compte les pages vues et l'usage
-                        du calculateur (calcul lancé, lien copié, modèle d'imprimante choisi) ; les valeurs que vous saisissez
+                        du bac à sable (outil choisi, pluie activée, vitre cassée, nouvelles dunes, capture téléchargée) ; vos créations
                         ne lui sont pas transmises. Si votre navigateur envoie le signal « Do Not Track », aucune mesure n'est faite.
                     </p>
                 {% endif %}
                 <p>
                     Conformément au RGPD, vous disposez de droits d'accès, de rectification et d'effacement
                     sur vos données : contactez l'éditeur à l'adresse indiquée ci-dessus.
-                </p>
-            </section>
-
-            <section class="content-section" aria-labelledby="responsabilite">
-                <h2 id="responsabilite">Responsabilité</h2>
-                <p>
-                    Les résultats du calculateur sont fournis à titre indicatif : ils dépendent des valeurs saisies
-                    et ne constituent ni un conseil fiscal, ni un conseil comptable. L'éditeur ne peut être tenu
-                    responsable des décisions prises à partir de ces résultats.
                 </p>
             </section>
 
