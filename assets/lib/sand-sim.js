@@ -123,6 +123,8 @@ export class SandSimulation {
         this.erosionSwitch = erosion.uErosion;
         const freezing = { uFreezing: { value: PHYSICS.lavaFreezing } };
         const waterDt = { uDt: { value: PHYSICS.dt / PHYSICS.waterSteps } };
+        // Live ocean, shared by the flux (breaking) and water (wave maker) passes.
+        const waves = { uWaves: { value: new THREE.Vector4(0, 0, 0, 0) }, uWaves2: { value: new THREE.Vector4(0, 0, 0, 0) } };
 
         this.passes = {
             initTerrain: pass(initTerrainShader, { uSeed: { value: new THREE.Vector2() }, uBasin: { value: new THREE.Vector2() } }),
@@ -161,12 +163,18 @@ export class SandSimulation {
             lavaSolidifyTerrain: pass(lavaSolidifyTerrainShader, freezing),
             lavaSolidify: pass(lavaSolidifyShader, freezing),
             // The water passes use their own, shorter time step (see PHYSICS.waterSteps).
-            flux: pass(fluxShader, { ...waterDt, uGravity: { value: PHYSICS.gravity }, uDamping: { value: PHYSICS.fluxDamping } }),
+            flux: pass(fluxShader, {
+                ...waterDt,
+                ...waves,
+                uGravity: { value: PHYSICS.gravity },
+                uDamping: { value: PHYSICS.fluxDamping },
+                uBreakLoss: { value: PHYSICS.breakLoss },
+            }),
             water: pass(waterShader, {
                 ...waterDt,
+                ...waves,
                 uMaxSpeed: { value: PHYSICS.maxSpeed },
                 uWorld: { value: PHYSICS.world },
-                uWaves: { value: new THREE.Vector4(0, 0, 0, 0) },
                 uWaveTime: { value: 0 },
             }),
             beach: pass(beachShader, { uLevel: { value: 0 } }),
@@ -282,14 +290,16 @@ export class SandSimulation {
         this.fill(level);
     }
 
-    /** Swell pushed in from the back edge; `null` stops it. */
-    setWaves(waves, level) {
-        const value = this.passes.water.uniforms.uWaves.value;
-        if (waves) {
-            value.set(waves.amplitude, waves.omega, level, 1);
-        } else {
-            value.w = 0;
+    /** Swell pushed in from the back edge, as the two trains of oceanWaveTrain(); `null` stops it. */
+    setWaves(trains, level) {
+        const { uWaves, uWaves2 } = this.passes.water.uniforms;
+        if (!trains) {
+            uWaves.value.w = 0;
+            return;
         }
+        const [a, b] = trains;
+        uWaves.value.set(a.amplitude, a.omega, level, 1);
+        uWaves2.value.set(b.amplitude, b.omega, a.kx, b.kx);
     }
 
     drain() {

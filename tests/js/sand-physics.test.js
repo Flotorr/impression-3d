@@ -166,3 +166,15 @@ test('ocean: Open-Meteo response parsing and compass', async () => {
     assert.equal(compass(-90), 'O');
     assert.equal(compass(181), 'S');
 });
+
+test('ocean: two swell trains beat into sets', async () => {
+    const { oceanWaves, oceanWaveTrain } = await import('../../assets/lib/sand-physics.js');
+    const [a, b] = oceanWaveTrain(1.5, 10);
+    const { amplitude, omega } = oceanWaves(1.5, 10);
+    const sum = a.amplitude + b.amplitude;
+    assert.ok(sum > amplitude && sum < amplitude * 1.3, 'the biggest waves of a set are a little above the average');
+    const wavesPerSet = a.omega / (b.omega - a.omega);
+    assert.ok(wavesPerSet > 8 && wavesPerSet < 15, `${wavesPerSet} waves per set`);
+    assert.ok(Math.abs(a.omega - omega) < 1e-9);
+    assert.ok(a.kx > 0 && b.kx < 0, 'the two trains come in at slightly different angles');
+});

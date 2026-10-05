@@ -44,8 +44,12 @@
                 </svg>
                 <span>flotor<span class="brand-tld">.fr</span></span>
             </a>
+            <nav class="mode-switch" aria-label="Choisir le bac">
+                <a href="{{ path('home') }}"{% if app.current_route == 'home' %} aria-current="page"{% endif %}>Bac à sable</a>
+                <a href="{{ path('ocean') }}"{% if app.current_route == 'ocean' %} aria-current="page"{% endif %}>Bac à houle</a>
+            </nav>
             <nav class="topbar-nav" aria-label="Navigation principale">
-                <a href="{{ path('home') }}#a-propos">Comment ça marche ?</a>
+                <a href="{{ app.current_route in ['home', 'ocean'] ? '' : path('home') }}#a-propos">Comment ça marche ?</a>
             </nav>
         </header>
 

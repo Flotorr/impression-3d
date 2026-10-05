@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { MAX_SPRINGS, OCEAN, oceanWaves, PHYSICS, toggleSpring, tool as toolById, worldToUv } from './sand-physics.js';
+import { MAX_SPRINGS, OCEAN, oceanWaves, oceanWaveTrain, PHYSICS, toggleSpring, tool as toolById, worldToUv } from './sand-physics.js';
 import { createRain, createSteam, createWaterfall, FLOOR, GlassTank, WALL_HEIGHT } from './sand-effects.js';
 import { sectionShader, shadowShader, terrainShader, waterSurfaceShader } from './sand-render-shaders.js';
 import { FloatingObjects } from './sand-objects.js';
@@ -16,7 +16,8 @@ const PUDDLE_EVERY = 10; // frames between two readbacks of the water leaving th
  * The constructor throws when WebGL 2 or float render targets are unavailable.
  */
 export class SandScene {
-    constructor(container, { reducedMotion = false } = {}) {
+    /** `tools: false` (wave tank): no tools, the left button and one finger turn the camera. */
+    constructor(container, { reducedMotion = false, tools = true } = {}) {
         this.container = container;
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
         if (!this.renderer.capabilities.isWebGL2) {
@@ -48,9 +49,10 @@ export class SandScene {
             maxTargetRadius: 1.3, // zooming towards the cursor moves the target: keep it over the tank
         });
         this.controls.target.set(0, 0.08, 0);
-        // The left button and a single finger belong to the tools.
-        this.controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
-        this.controls.touches = { ONE: null, TWO: THREE.TOUCH.DOLLY_ROTATE };
+        // With tools, the left button and a single finger belong to them.
+        this.tools = tools;
+        this.controls.mouseButtons = { LEFT: tools ? null : THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+        this.controls.touches = { ONE: tools ? null : THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
 
         this.sun = new THREE.Vector3(0.55, 0.75, 0.35).normalize();
         this.shared = {
@@ -81,7 +83,9 @@ export class SandScene {
         this.sinceReadback = 0;
         this.raycaster = new THREE.Raycaster();
         this.reducedMotion = reducedMotion;
-        this.bindPointer();
+        if (tools) {
+            this.bindPointer();
+        }
 
         this.resizeObserver = new ResizeObserver(() => this.resize());
         this.resizeObserver.observe(container);
@@ -356,7 +360,7 @@ export class SandScene {
     /** New readings for the swell already shown. */
     updateOcean(swell) {
         const waves = oceanWaves(swell.height, swell.period);
-        this.sim.setWaves(waves, OCEAN.level);
+        this.sim.setWaves(oceanWaveTrain(swell.height, swell.period), OCEAN.level);
         this.shared.uSwell.value.set(OCEAN.level, Math.max(waves.amplitude, 0.002));
     }
 
@@ -512,11 +516,13 @@ export class SandScene {
         this.setRunning(false);
         this.resizeObserver.disconnect();
         const canvas = this.renderer.domElement;
-        canvas.removeEventListener('pointerdown', this.onPointerDown);
-        canvas.removeEventListener('pointermove', this.onPointerMove);
-        canvas.removeEventListener('pointerup', this.onPointerUp);
-        canvas.removeEventListener('pointercancel', this.onPointerUp);
-        canvas.removeEventListener('pointerleave', this.onPointerLeave);
+        if (this.tools) {
+            canvas.removeEventListener('pointerdown', this.onPointerDown);
+            canvas.removeEventListener('pointermove', this.onPointerMove);
+            canvas.removeEventListener('pointerup', this.onPointerUp);
+            canvas.removeEventListener('pointercancel', this.onPointerUp);
+            canvas.removeEventListener('pointerleave', this.onPointerLeave);
+        }
         this.controls.dispose();
         this.tank.dispose();
         this.objects.dispose();

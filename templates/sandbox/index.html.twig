@@ -56,19 +56,6 @@
                     <input type="checkbox" checked data-sandbox-target="erosion" data-action="sandbox#toggleErosion">
                     <span>Érosion</span>
                 </label>
-                <p class="panel-title">Océan en direct</p>
-                <form class="ocean-form" data-action="submit->sandbox#loadOcean">
-                    <label class="visually-hidden" for="ocean-city">Ville côtière</label>
-                    <input type="search" id="ocean-city" placeholder="Ville côtière (ex. Biarritz)" autocomplete="off" required data-sandbox-target="city">
-                    <button type="submit" class="btn" data-sandbox-target="oceanSubmit">Charger</button>
-                </form>
-                <div class="ocean-card" data-sandbox-target="oceanCard" hidden>
-                    <p class="ocean-place" data-sandbox-target="oceanPlace"></p>
-                    <dl class="ocean-facts" data-sandbox-target="oceanFacts"></dl>
-                    <p class="ocean-note">À l'échelle du surfeur (1,75 m). Mis à jour toutes les 15 minutes.
-                        Données <a href="https://open-meteo.com/" rel="noopener" target="_blank">Open-Meteo</a> (CC BY 4.0), issues de modèles de vagues.</p>
-                    <button type="button" class="link-button" data-action="sandbox#stopOcean">Arrêter la houle</button>
-                </div>
                 <p class="panel-title">Vider / remplir</p>
                 <div class="panel-actions">
                     <button type="button" class="btn" data-action="sandbox#clearSand">Retirer le sable</button>
@@ -136,15 +123,6 @@
                         Canard, bateau en papier, feuille, bûche ou ballon : posés sur l'eau, ils dérivent avec le courant,
                         tanguent, s'écartent les uns des autres et s'échouent quand l'eau se retire. Leur mouvement est
                         calculé sur la carte graphique, à partir de la vitesse de l'eau sous chacun d'eux.
-                    </p>
-                </article>
-                <article>
-                    <h3>La houle d'une vraie plage</h3>
-                    <p>
-                        Tapez une ville côtière : le bac devient une plage et reçoit la houle mesurée là-bas par les modèles
-                        d'Open-Meteo. Tout est à l'échelle du surfeur, qui mesure 1,75 m : une houle d'un mètre lui arrive
-                        aux hanches. Comme dans les bassins à houle des laboratoires, les durées sont réduites dans le même
-                        rapport que les longueurs (similitude de Froude), pour que les vagues gardent leurs proportions.
                     </p>
                 </article>
                 <article>

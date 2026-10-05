@@ -5,6 +5,11 @@
         <changefreq>monthly</changefreq>
         <priority>1.0</priority>
     </url>
+    <url>
+        <loc>https://flotor.fr/houle</loc>
+        <changefreq>daily</changefreq>
+        <priority>0.9</priority>
+    </url>
     <!-- Re-enable with app.features.legal_page in config/services.yaml:
     <url>
         <loc>https://flotor.fr/mentions-legales</loc>

@@ -240,6 +240,8 @@ uniform sampler2D uWater;
 uniform sampler2D uFlux;
 uniform float uGravity;
 uniform float uDamping;
+uniform vec4 uWaves;     // live ocean (see waterShader): z still-water level, w on/off
+uniform float uBreakLoss;
 ${GROUND}
 float surface(vec2 uv) { return groundAt(uv) + texture2D(uWater, uv).r; }
 void main() {
@@ -251,6 +253,11 @@ void main() {
     // Pipe of section cell² and length cell: the flow grows by dt · g · cell · Δh.
     // Through a broken pane the water pours out and leaves the simulation.
     vec4 f = max(vec4(0.0), texture2D(uFlux, vUv) * uDamping + uDt * uGravity * uCell * dh) * (openSides() + outside);
+    // Breaking: a crest higher than about half the still depth topples and loses its energy in whitewater.
+    if (uWaves.w > 0.5) {
+        float stillDepth = max(uWaves.z - groundAt(vUv), 0.003);
+        f *= 1.0 - uBreakLoss * smoothstep(0.42, 0.65, (h - uWaves.z) / stillDepth);
+    }
     float total = f.r + f.g + f.b + f.a;
     float available = d * uCell * uCell / uDt;
     if (total > available) {
@@ -268,8 +275,10 @@ uniform sampler2D uWater;
 uniform sampler2D uFlux;
 uniform float uMaxSpeed;
 uniform float uWorld;
-// Wave maker along the back edge (v = 1): amplitude, angular frequency, still-water level, on/off.
+// Wave maker along the back edge (v = 1). uWaves: amplitude, angular frequency, still-water level, on/off
+// of the first train; uWaves2: amplitude and angular frequency of the second, wavenumbers along the edge of both.
 uniform vec4 uWaves;
+uniform vec4 uWaves2;
 uniform float uWaveTime;
 ${GROUND}
 void main() {
@@ -291,7 +300,9 @@ void main() {
 
     // The last rows at the back follow the swell: like the paddle of a wave tank, they push the waves in.
     if (uWaves.w > 0.5 && vUv.y > 1.0 - 2.0 * uTexel.y) {
-        float surface = uWaves.z + uWaves.x * sin(uWaves.y * uWaveTime);
+        float x = (vUv.x - 0.5) * uWorld;
+        float surface = uWaves.z + uWaves.x * sin(uWaves.y * uWaveTime - uWaves2.z * x)
+                      + uWaves2.x * sin(uWaves2.y * uWaveTime - uWaves2.w * x + 1.7);
         d = max(0.0, surface - groundAt(vUv));
     }
 
@@ -549,7 +560,10 @@ uniform float uLevel;
 void main() {
     // v = 1 is the back (open sea), v = 0 the front (the beach, near the camera)
     float shore = smoothstep(0.78, 0.05, vUv.y);
-    float sand = 0.03 + (uLevel + 0.06) * shore + 0.006 * fbm(vUv * 6.0) + 0.004 * sin(vUv.x * 40.0 + fbm(vUv * 3.0) * 3.0) * shore;
+    // A sandbar offshore, wavy along the beach: the waves break a first time on it, then reform.
+    float barLine = 0.5 + 0.04 * sin(vUv.x * 7.0 + 1.3) + 0.02 * fbm(vUv * 3.0);
+    float bar = 0.02 * exp(-pow((vUv.y - barLine) / 0.05, 2.0)); // its top stays just under the still water
+    float sand = 0.03 + (uLevel + 0.06) * shore + bar + 0.006 * fbm(vUv * 6.0) + 0.004 * sin(vUv.x * 40.0 + fbm(vUv * 3.0) * 3.0) * shore;
     gl_FragColor = vec4(sand, 0.0, 0.0, 0.0);
 }
 `;

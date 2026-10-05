@@ -1,12 +1,7 @@
 /* stimulusFetch: 'lazy' */
 import { Controller } from '@hotwired/stimulus';
 import { SandScene } from '../lib/sand-scene.js';
-import { compass, OBJECT_TYPES, OCEAN, parseMarine, SIDES, toolForKey, TOOLS } from '../lib/sand-physics.js';
-
-// Open-Meteo (https://open-meteo.com): free for non-commercial use, no key, CC BY 4.0 attribution shown on the card.
-const GEOCODING = 'https://geocoding-api.open-meteo.com/v1/search';
-const MARINE = 'https://marine-api.open-meteo.com/v1/marine';
-const MARINE_FIELDS = 'wave_height,swell_wave_height,swell_wave_period,swell_wave_direction,sea_surface_temperature';
+import { OBJECT_TYPES, SIDES, toolForKey, TOOLS } from '../lib/sand-physics.js';
 
 const BRUSH_COLOURS = {
     dig: '#e0763c', raise: '#f2c14e', clay: '#c4623d', rock: '#8d9299', push: '#ffffff',
@@ -21,7 +16,7 @@ const SIZE = { min: 0.03, max: 0.2 }; // brush radius in uv units
 export default class extends Controller {
     static targets = [
         'viewport', 'tools', 'size', 'strength', 'waterSpeed', 'waterSpeedOutput', 'rain', 'erosion', 'springs', 'repair',
-        'objectType', 'clearObjects', 'city', 'oceanCard', 'oceanPlace', 'oceanFacts', 'oceanSubmit', 'toast', 'panelToggle', 'fallback',
+        'objectType', 'clearObjects', 'toast', 'panelToggle', 'fallback',
     ];
 
     connect() {
@@ -62,7 +57,6 @@ export default class extends Controller {
     }
 
     disconnect() {
-        clearInterval(this.oceanTimer);
         removeEventListener('keydown', this.onKeyDown);
         this.observer?.disconnect();
         this.scene?.dispose();
@@ -106,100 +100,6 @@ export default class extends Controller {
         this.scene.sim.reset();
         this.toast('Nouvelles dunes.');
         this.track('nouvelles-dunes');
-    }
-
-    // --- Live ocean ----------------------------------------------------------------
-
-    async loadOcean(event) {
-        event.preventDefault();
-        const name = this.cityTarget.value.trim();
-        if (!name) {
-            return;
-        }
-        this.oceanSubmitTarget.disabled = true;
-        try {
-            const geo = await this.getJson(`${GEOCODING}?${new URLSearchParams({ name, count: 1, language: 'fr' })}`);
-            const place = geo.results?.[0];
-            if (!place) {
-                this.toast(`Ville introuvable : ${name}.`);
-                return;
-            }
-            const swell = await this.fetchSwell(place);
-            if (!swell) {
-                this.toast(`Pas de mer assez proche de ${place.name} pour mesurer la houle.`);
-                return;
-            }
-            this.place = place;
-            this.scene.startOcean(swell);
-            this.renderOcean(swell);
-            clearInterval(this.oceanTimer);
-            this.oceanTimer = setInterval(() => this.refreshOcean(), OCEAN.refreshMinutes * 60 * 1000);
-            this.track('ocean', { ville: place.name });
-        } catch {
-            this.toast('Les données de houle sont injoignables pour le moment.');
-        } finally {
-            this.oceanSubmitTarget.disabled = false;
-        }
-    }
-
-    stopOcean() {
-        clearInterval(this.oceanTimer);
-        this.scene.stopOcean();
-        this.oceanCardTarget.hidden = true;
-        this.place = null;
-    }
-
-    async refreshOcean() {
-        if (!this.place) {
-            return;
-        }
-        try {
-            const swell = await this.fetchSwell(this.place);
-            if (swell) {
-                this.scene.updateOcean(swell);
-                this.renderOcean(swell);
-            }
-        } catch {
-            // Keep the last reading; the next refresh will try again.
-        }
-    }
-
-    async fetchSwell({ latitude, longitude, timezone }) {
-        const query = new URLSearchParams({ latitude, longitude, current: MARINE_FIELDS, timezone: timezone ?? 'auto' });
-
-        return parseMarine(await this.getJson(`${MARINE}?${query}`));
-    }
-
-    async getJson(url) {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-
-        return response.json();
-    }
-
-    renderOcean(swell) {
-        const decimal = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 });
-        this.oceanPlaceTarget.textContent = [this.place.name, this.place.admin1, this.place.country].filter(Boolean).join(', ');
-        const time = swell.time ? swell.time.slice(11, 16) : '';
-        const rows = [
-            ['Houle', `${decimal.format(swell.height)} m`],
-            ['Période', `${decimal.format(swell.period)} s`],
-            ['Vient du', swell.direction === null ? '–' : `${compass(swell.direction)} (${Math.round(swell.direction)}°)`],
-            ['Mer totale', swell.waves === null ? '–' : `${decimal.format(swell.waves)} m`],
-            ['Eau', swell.temperature === null ? '–' : `${decimal.format(swell.temperature)} °C`],
-            ['Relevé', time ? `${time} (heure locale)` : '–'],
-        ];
-        this.oceanFactsTarget.replaceChildren(...rows.flatMap(([term, value]) => {
-            const dt = document.createElement('dt');
-            dt.textContent = term;
-            const dd = document.createElement('dd');
-            dd.textContent = value;
-
-            return [dt, dd];
-        }));
-        this.oceanCardTarget.hidden = false;
     }
 
     clearSand() {
@@ -297,7 +197,9 @@ export default class extends Controller {
     }
 
     renderObjectTypes() {
-        this.objectTypeTarget.replaceChildren(...OBJECT_TYPES.map(({ id, label }) => new Option(label, id)));
+        // The surfer belongs to the wave tank (/houle).
+        const types = OBJECT_TYPES.filter(({ id }) => id !== 'surfer');
+        this.objectTypeTarget.replaceChildren(...types.map(({ id, label }) => new Option(label, id)));
     }
 
     objectsChanged(count) {

@@ -101,6 +101,228 @@ kbd {
     color: var(--water);
 }
 
+/* Choice between the two tanks */
+.mode-switch {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--panel-border);
+    border-radius: 999px;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+}
+
+.mode-switch a {
+    padding: 6px 14px;
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.mode-switch a:hover {
+    color: var(--text);
+}
+
+.mode-switch a[aria-current="page"] {
+    background: var(--text);
+    color: #fff;
+}
+
+.stage-viewport-orbit {
+    cursor: grab;
+}
+
+.stage-viewport-orbit:active {
+    cursor: grabbing;
+}
+
+.ocean-spots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.chip {
+    padding: 4px 10px;
+    border: 1px solid rgba(31, 42, 54, 0.14);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.85);
+    color: var(--text);
+    font: 600 12px/1.4 var(--font);
+    cursor: pointer;
+}
+
+.chip:hover {
+    border-color: var(--water);
+    color: var(--water);
+}
+
+.ocean-webcam {
+    margin: 10px 0 0;
+}
+
+.ocean-webcam[hidden] {
+    display: none;
+}
+
+.ocean-webcam img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+}
+
+.ocean-webcam-view {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: zoom-in;
+}
+
+/* Wave tank: a wider panel, easier to read */
+.hud-panel.ocean-panel {
+    width: 380px;
+    padding: 18px 20px;
+    max-height: calc(100% - 100px);
+}
+
+.ocean-panel .ocean-form input,
+.ocean-panel .ocean-form .btn {
+    padding: 10px 12px;
+    font-size: 15px;
+}
+
+.ocean-panel .chip {
+    padding: 6px 12px;
+    font-size: 13px;
+}
+
+.ocean-panel .ocean-card {
+    padding: 14px 16px;
+}
+
+.ocean-panel .ocean-place {
+    font-size: 18px;
+}
+
+.ocean-panel .ocean-facts {
+    gap: 6px 16px;
+    font-size: 15px;
+}
+
+.ocean-panel .ocean-facts dd {
+    font-weight: 700;
+}
+
+.ocean-panel .ocean-note,
+.ocean-panel .ocean-webcam figcaption {
+    font-size: 12.5px;
+}
+
+.ocean-panel .ocean-webcam img {
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+}
+
+/* Timelapse, large, over the page */
+.webcam-dialog {
+    width: min(1100px, 92vw);
+    max-height: 92vh;
+    padding: 14px;
+    border: 0;
+    border-radius: var(--radius);
+    background: #0d1720;
+    color: #e8eef3;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+
+.webcam-dialog::backdrop {
+    background: rgba(8, 14, 20, 0.7);
+}
+
+.webcam-dialog-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.webcam-dialog-head p {
+    flex: 1;
+    margin: 0;
+    font-weight: 700;
+}
+
+.webcam-dialog-head .btn {
+    text-decoration: none;
+}
+
+.webcam-dialog-head [hidden] {
+    display: none;
+}
+
+.webcam-dialog iframe {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 72vh;
+    aspect-ratio: 16 / 10;
+    border: 0;
+    border-radius: 8px;
+    background: #000;
+}
+
+.webcam-dialog-credit {
+    margin: 8px 0 0;
+    color: #9fb0bf;
+    font-size: 12px;
+}
+
+.webcam-dialog-credit a {
+    color: #8fd0f0;
+}
+
+.ocean-webcam-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.ocean-webcam-actions .btn {
+    flex: 1;
+    text-align: center;
+    text-decoration: none;
+}
+
+.ocean-webcam-actions [hidden] {
+    display: none;
+}
+
+.ocean-webcam figcaption {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 11.5px;
+    line-height: 1.5;
+}
+
+.ocean-status {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.ocean-status[hidden] {
+    display: none;
+}
+
 .topbar-nav a {
     color: var(--muted);
     font-size: 14px;
@@ -473,6 +695,8 @@ input[type='range'] {
 
 @media (max-width: 899px) {
     .topbar { padding: 12px 16px; }
+    .topbar-nav { display: none; }
+    .mode-switch a { padding: 5px 10px; font-size: 12px; }
 
     /* On a phone the tools go back to the bottom, in one row that scrolls sideways */
     .hud-tools {
@@ -513,6 +737,7 @@ input[type='range'] {
     }
 
     .is-panel-open .hud-panel { display: block; }
+    .hud-panel.ocean-panel { width: auto; }
     .hint-keys { display: none; }
 }
 

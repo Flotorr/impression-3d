@@ -22,11 +22,66 @@ final class PagesTest extends WebTestCase
 
         $stage = $crawler->filter('[data-controller="sandbox"]');
         $this->assertCount(1, $stage);
-        foreach (['viewport', 'tools', 'size', 'strength', 'waterSpeed', 'rain', 'erosion', 'springs', 'repair', 'city', 'oceanCard', 'fallback'] as $target) {
+        foreach (['viewport', 'tools', 'size', 'strength', 'waterSpeed', 'rain', 'erosion', 'springs', 'repair', 'fallback'] as $target) {
             $this->assertCount(1, $stage->filter(sprintf('[data-sandbox-target="%s"]', $target)), $target);
         }
         $this->assertNotNull($stage->filter('[data-sandbox-target="fallback"]')->attr('hidden'), 'fallback hidden until WebGL fails');
         $this->assertCount(1, $crawler->filter('#a-propos h2'), 'explanatory text for visitors and search engines');
+    }
+
+    public function testWaveTankPage(): void
+    {
+        $client = static::createClient();
+        $crawler = $client->request('GET', '/houle?ville=Hossegor');
+
+        $this->assertResponseIsSuccessful();
+        $this->assertCount(1, $crawler->filter('h1'), 'exactly one H1');
+        $this->assertSelectorTextContains('h1', 'houle');
+        $this->assertSame('https://flotor.fr/houle', $crawler->filter('link[rel="canonical"]')->attr('href'), 'the town is not part of the canonical URL');
+        $stage = $crawler->filter('[data-controller="ocean"]');
+        $this->assertCount(1, $stage);
+        $this->assertSame('Biarritz', $stage->attr('data-ocean-default-city-value'));
+        foreach (['viewport', 'city', 'card', 'facts', 'webcam', 'fallback'] as $target) {
+            $this->assertCount(1, $stage->filter(sprintf('[data-ocean-target="%s"]', $target)), $target);
+        }
+        $this->assertGreaterThanOrEqual(3, $stage->filter('[data-action="ocean#pick"]')->count(), 'a few known spots');
+        $this->assertStringContainsString('Open-Meteo', $stage->text(), 'CC BY attribution');
+        // The sand tools stay on the sandbox page.
+        $this->assertCount(0, $crawler->filter('[data-controller="sandbox"]'));
+
+        $title = $crawler->filter('title')->text();
+        $description = $crawler->filter('meta[name="description"]')->attr('content');
+        $this->assertLessThanOrEqual(65, mb_strlen($title));
+        $this->assertGreaterThanOrEqual(80, mb_strlen($description));
+        $this->assertLessThanOrEqual(165, mb_strlen($description));
+    }
+
+    public function testWebcamEndpointWithoutKey(): void
+    {
+        $client = static::createClient();
+        $client->request('GET', '/api/webcam?lat=43.48&lon=-1.56');
+
+        $this->assertResponseIsSuccessful();
+        $this->assertSame(['available' => false], json_decode($client->getResponse()->getContent(), true));
+
+        $client->request('GET', '/api/webcam?lat=120&lon=-1.56');
+        $this->assertResponseStatusCodeSame(422, 'latitude out of range');
+        $client->request('GET', '/api/webcam');
+        $this->assertResponseStatusCodeSame(422, 'missing coordinates');
+    }
+
+    public function testBothPagesOfferTheTankSwitch(): void
+    {
+        $client = static::createClient();
+        foreach (['/' => 'Bac à sable', '/houle' => 'Bac à houle'] as $path => $current) {
+            $crawler = $client->request('GET', $path);
+            $switch = $crawler->filter('nav.mode-switch');
+            $this->assertCount(1, $switch->filter('a[href="/"]'));
+            $this->assertCount(1, $switch->filter('a[href="/houle"]'));
+            $this->assertSame($current, $switch->filter('a[aria-current="page"]')->text());
+        }
+        // The ocean is not mixed into the sandbox any more.
+        $this->assertCount(0, $client->request('GET', '/')->filter('[data-ocean-target]'));
     }
 
     public function testCanonicalIgnoresQueryString(): void
@@ -123,7 +178,7 @@ final class PagesTest extends WebTestCase
         foreach ($xml->url as $url) { // XML comments are ignored by the parser
             $urls[] = (string) $url->loc;
         }
-        $expected = ['https://flotor.fr/'];
+        $expected = ['https://flotor.fr/', 'https://flotor.fr/houle'];
         if ($this->feature('legal_page')) {
             $expected[] = 'https://flotor.fr/mentions-legales';
         }

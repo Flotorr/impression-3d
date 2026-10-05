@@ -250,9 +250,17 @@ void main() {
     vec3 colour = mix(body, reflection, fresnel);
     // Live ocean: crests lighter, troughs darker, so a long, gentle swell can still be read from above.
     if (uSwell.y > 0.0) {
-        float crest = clamp((groundAt(vUv) + d - uSwell.x) / uSwell.y, -1.0, 1.0);
+        float eta = groundAt(vUv) + d - uSwell.x;
+        float crest = clamp(eta / uSwell.y, -1.0, 1.0);
         colour *= 1.0 + 0.35 * crest;
         colour = mix(colour, lin(vec3(0.75, 0.9, 0.9)), smoothstep(0.6, 1.0, crest) * 0.25);
+        // Whitewater where the crest is too high for the depth (same rule as the breaking in the simulation),
+        // and foam streaks on the steep fronts of the waves.
+        float stillDepth = max(uSwell.x - groundAt(vUv), 0.003);
+        float breaking = smoothstep(0.3, 0.6, eta / stillDepth);
+        float steep = smoothstep(0.25, 0.6, length(vec2(sx, sy))) * step(0.0, eta);
+        float streaks = smoothstep(0.45, 0.8, valueNoise(vWorld.xz * vec2(90.0, 35.0) + uTime * vec2(0.3, -0.8)));
+        foam += breaking * (0.55 + 0.45 * churn) + steep * streaks * 0.6;
     }
     colour = mix(colour, vec3(0.92), clamp(foam, 0.0, 1.0) * 0.75);
     float alpha = clamp(1.0 - transmittance.g * 0.85 + fresnel * 0.6 + foam, 0.12, 0.96);

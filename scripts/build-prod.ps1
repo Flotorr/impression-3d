@@ -40,6 +40,16 @@ try {
     $env:APP_DEBUG = '0'
     $env:APP_SECRET = (Get-Content $secretFile -Raw).Trim()
 
+    # Clé Windy (webcams du bac à houle) : reprise du .env.local du poste, jamais versionné.
+    # Seule cette ligne est copiée ; dump-env la compile dans .env.local.php avec le reste.
+    $localEnv = Join-Path $root '.env.local'
+    $windyKey = if (Test-Path $localEnv) { Select-String -Path $localEnv -Pattern '^WINDY_WEBCAMS_KEY=.+' | Select-Object -Last 1 } else { $null }
+    if ($windyKey) {
+        Set-Content -Path (Join-Path $out '.env.prod.local') -Value $windyKey.Line -Encoding ascii
+    } else {
+        Write-Warning 'Pas de WINDY_WEBCAMS_KEY dans .env.local : le bac à houle sera sans webcam.'
+    }
+
     composer install --no-dev --optimize-autoloader --no-interaction --no-progress
     if ($LASTEXITCODE) { throw 'composer install a échoué' }
     php bin/console asset-map:compile

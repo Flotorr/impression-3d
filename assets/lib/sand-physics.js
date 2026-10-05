@@ -14,6 +14,7 @@ export const PHYSICS = {
     waterSteps: 2,
     maxSubsteps: 8,
     fluxDamping: 0.9993, // pipe flow kept from one step to the next: waves keep ~70 % of their energy per second
+    breakLoss: 0.012, // flow lost per water step where a wave breaks (live ocean)
     maxSpeed: 1.5, // water speed cap, world units per second (keeps the scheme stable)
     // Angle of repose: dry sand slides past ~32°, damp sand holds ~50°, underwater it slumps at ~25°.
     talusDry: deg(32),
@@ -195,4 +196,21 @@ const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
 /** "NO" for 313°: where the swell comes from, in French. */
 export function compass(degrees) {
     return COMPASS[Math.round((((degrees % 360) + 360) % 360) / 45) % 8];
+}
+
+/**
+ * The swell as two trains: their periods differ by 9 %, so they beat into sets of bigger waves every ~11 waves,
+ * and they arrive at slightly different angles. Each train: amplitude, angular frequency and wavenumber along
+ * the back edge (kx, from the angle and the shallow-water wave speed at the back of the tank).
+ */
+export function oceanWaveTrain(height, period, backDepth = OCEAN.level - 0.03) {
+    const { amplitude, omega } = oceanWaves(height, period);
+    const speed = Math.sqrt(PHYSICS.gravity * backDepth);
+    const train = (share, frequency, degrees) => ({
+        amplitude: amplitude * share,
+        omega: omega * frequency,
+        kx: ((omega * frequency) / speed) * Math.sin((degrees * Math.PI) / 180),
+    });
+
+    return [train(0.72, 1, 10), train(0.42, 1.09, -6)];
 }

@@ -11,7 +11,7 @@ composer install                    # télécharge aussi Stimulus et Three.js da
 symfony server:start                # ou : php -S 127.0.0.1:8000 -t public
 ```
 
-Page : <http://127.0.0.1:8000/>. PHP 8.4+ et un navigateur avec WebGL 2 requis.
+Pages : <http://127.0.0.1:8000/> (bac à sable) et <http://127.0.0.1:8000/houle> (bac à houle). PHP 8.4+ et un navigateur avec WebGL 2 requis.
 
 ## Tests
 
@@ -75,11 +75,26 @@ les objets se repoussent et rebondissent sur les vitres. Par une vitre cassée, 
 en chute libre et restent sur le socle en bois ou sur la table. Le rendu (maillages instanciés) lit cette texture dans le
 vertex shader pour poser chaque objet sur l'eau, incliné avec la surface : rien n'est relu côté CPU.
 
-**Océan en direct** : une ville côtière est géocodée puis sa houle du moment est demandée à Open-Meteo, depuis le
-navigateur (API gratuite pour un usage non commercial, sans clé ; attribution CC BY 4.0 affichée sur la fiche). Le bac
+**Bac à houle** (page `/houle`, séparée du bac à sable ; un sélecteur en haut passe de l'un à l'autre) : une ville
+côtière (`?ville=`, Biarritz par défaut) est géocodée puis sa houle du moment est demandée à Open-Meteo, depuis le
+navigateur (`assets/lib/ocean-data.js`, `assets/controllers/ocean_controller.js`). Pas d'outils sur cette page : la souris
+ne fait que tourner et zoomer (API gratuite pour un usage non commercial, sans clé ; attribution CC BY 4.0 affichée sur la fiche). Le bac
 devient une plage et une rangée de cellules au fond pousse la houle comme le batteur d'un bassin à houle. Tout est à
 l'échelle du surfeur (1,75 m, `OCEAN.metre`) : hauteurs et longueurs × `metre`, durées × √`metre` (similitude de
 Froude). Rafraîchi toutes les 15 minutes. Ce sont des données de modèles de vagues, pas de mesures de bouées.
+La houle est faite de deux trains (périodes à 9 % d'écart, angles légèrement différents : des séries de vagues plus
+grosses toutes les ~11 vagues), la plage a une barre de sable immergée, et une crête plus haute que ~la moitié de la
+profondeur déferle (perte d'énergie dans la passe des flux, écume blanche au rendu).
+
+**Webcam de la plage** : `/api/webcam?lat=&lon=` (`WebcamController`, `src/Webcam/WebcamFinder.php`) cherche avec la
+[Windy Webcams API](https://api.windy.com/webcams) la webcam la plus proche dans un rayon de 15 km (plage ou côte
+d'abord) et la met en cache 8 minutes (les liens d'images gratuits expirent après 10). La clé reste sur le serveur :
+la mettre dans `.env.local` (`WINDY_WEBCAMS_KEY=...`, compte gratuit sur api.windy.com). Sans clé, la page n'affiche
+pas de webcam. Le crédit « Webcams fournies par windy.com » est obligatoire et affiché sous l'image. Seules les webcams
+de plage ou de côte sont retenues. L'offre gratuite de Windy n'a pas de flux en direct : la page montre l'image
+la plus récente, le lecteur officiel de Windy (timelapse de la journée, intégrable) et un bouton « Voir le direct » vers
+la page de l'exploitant de la caméra (Viewsurf, Gosurf…), dont le flux n'est pas intégré au site. Les cinq spots proposés ont les coordonnées de leur plage (la recherche par nom peut
+tomber dans les terres ou sur un homonyme). `scripts/build-prod.ps1` reprend la clé du `.env.local` du poste pour la prod.
 
 La souris vise le terrain en lisant sur le GPU la hauteur sous le pointeur (deux allers-retours). Le rendu s'arrête
 quand le bac sort de l'écran ou que l'onglet est masqué. Sans `EXT_color_buffer_float`, la simulation passe en
@@ -101,7 +116,7 @@ Après changement en production : `APP_ENV=prod php bin/console cache:clear`.
 
 Umami Cloud, sans cookie (pas de bandeau de consentement). Actif seulement si `UMAMI_WEBSITE_ID` est renseigné,
 dans `.env.prod` : le dev et les tests n'envoient rien. Une seule page vue, sans query string.
-Événements : `outil` (`nom` de l'outil choisi), `objet` (premier objet posé), `pluie`, `vitre-cassee` (`cote`), `bac-vide`, `remplir`, `ocean` (`ville`), `nouvelles-dunes`, `capture-png`.
+Événements : `outil` (`nom` de l'outil choisi), `objet` (premier objet posé), `pluie`, `vitre-cassee` (`cote`), `bac-vide`, `remplir`, `ocean` (`ville`), `timelapse`, `nouvelles-dunes`, `capture-png`.
 Le paragraphe correspondant des mentions légales s'affiche automatiquement quand Umami est actif.
 
 Google Search Console (propriété « Préfixe d'URL », méthode « Balise HTML ») : mettre la valeur `content` de la balise

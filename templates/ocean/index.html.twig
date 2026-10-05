@@ -1,0 +1,136 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Houle en direct en 3D : la vague à l'échelle d'un surfeur{% endblock %}
+{% block meta_description %}Tapez une ville côtière : la houle du moment arrive sur une plage en 3D, à l'échelle d'un surfeur de 1,75 m. Hauteur, période, direction et température de l'eau.{% endblock %}
+{% block canonical %}{{ site_url ~ path('ocean') }}{% endblock %}
+{% block body_class %}page-ocean{% endblock %}
+
+{% block structured_data %}
+    <script type="application/ld+json">
+        {{ {
+            '@context': 'https://schema.org',
+            '@type': 'WebApplication',
+            name: 'Bac à houle : la houle en direct en 3D',
+            url: site_url ~ path('ocean'),
+            applicationCategory: 'EntertainmentApplication',
+            operatingSystem: 'Navigateur web avec WebGL 2',
+            inLanguage: 'fr',
+            isAccessibleForFree: true,
+            offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' },
+        }|json_encode(constant('JSON_UNESCAPED_SLASHES') b-or constant('JSON_UNESCAPED_UNICODE'))|raw }}
+    </script>
+{% endblock %}
+
+{# Known spots: coordinates of the beach itself (town search can land inland, or on a namesake). #}
+{% set spots = [
+    {name: 'Biarritz', admin1: 'Grande Plage', country: 'France', latitude: 43.4847, longitude: -1.5586},
+    {name: 'Hossegor', admin1: 'La Gravière', country: 'France', latitude: 43.6767, longitude: -1.4436},
+    {name: 'Lacanau', admin1: 'Lacanau-Océan', country: 'France', latitude: 45.0013, longitude: -1.2023},
+    {name: 'La Torche', admin1: 'Plomeur, Finistère', country: 'France', latitude: 47.8378, longitude: -4.35},
+    {name: 'Nazaré', admin1: 'Praia do Norte', country: 'Portugal', latitude: 39.606, longitude: -9.087},
+] %}
+{% block body %}
+    <main>
+        <section class="stage" aria-labelledby="stage-title" data-controller="ocean" data-ocean-default-city-value="Biarritz"
+                 data-ocean-spots-value="{{ spots|json_encode }}"
+                 data-ocean-webcam-url-value="{{ path('api_webcam') }}">
+            <div class="stage-viewport stage-viewport-orbit" data-ocean-target="viewport"></div>
+            {# Hidden on screen, kept for search engines and screen readers. #}
+            <h1 id="stage-title" class="visually-hidden">Bac à houle : la houle en direct, à l'échelle d'un surfeur</h1>
+
+            <aside class="hud hud-panel ocean-panel" id="ocean-settings" aria-label="Houle en direct">
+                <p class="panel-title">Houle en direct</p>
+                <form class="ocean-form" data-action="submit->ocean#submit">
+                    <label class="visually-hidden" for="ocean-city">Ville côtière</label>
+                    <input type="search" id="ocean-city" placeholder="Ville côtière" autocomplete="off" required data-ocean-target="city">
+                    <button type="submit" class="btn" data-ocean-target="submit">Voir</button>
+                </form>
+                <div class="ocean-spots" aria-label="Spots connus">
+                    {% for spot in spots %}
+                        <button type="button" class="chip" data-action="ocean#pick" data-city="{{ spot.name }}">{{ spot.name }}</button>
+                    {% endfor %}
+                </div>
+                <p class="ocean-status" data-ocean-target="status" role="status" aria-live="polite" hidden></p>
+                <div class="ocean-card" data-ocean-target="card" hidden>
+                    <p class="ocean-place" data-ocean-target="place"></p>
+                    <dl class="ocean-facts" data-ocean-target="facts"></dl>
+                    <p class="ocean-note">À l'échelle du surfeur (1,75 m). Mis à jour toutes les 15 minutes.
+                        Données <a href="https://open-meteo.com/" rel="noopener" target="_blank">Open-Meteo</a> (CC BY 4.0), issues de modèles de vagues.</p>
+                </div>
+                <figure class="ocean-webcam" data-ocean-target="webcam" hidden>
+                    <button type="button" class="ocean-webcam-view" data-action="ocean#playTimelapse" aria-label="Agrandir le timelapse de la webcam">
+                        <img data-ocean-target="webcamImage" alt="" loading="lazy">
+                    </button>
+                    <div class="ocean-webcam-actions">
+                        <button type="button" class="btn" data-action="ocean#playTimelapse" data-ocean-target="webcamPlay">▶ Timelapse du jour</button>
+                        <a class="btn" data-ocean-target="webcamLive" target="_blank" rel="noopener" hidden>Voir le direct ↗</a>
+                    </div>
+                    <figcaption>
+                        <a data-ocean-target="webcamLink" target="_blank" rel="noopener"><span data-ocean-target="webcamTitle"></span></a>
+                        <span data-ocean-target="webcamLiveNote" hidden></span><br>
+                        Webcams fournies par <a href="https://www.windy.com/" target="_blank" rel="noopener">windy.com</a>
+                        · <a href="https://www.windy.com/webcams/add" target="_blank" rel="noopener">ajouter une webcam</a>
+                    </figcaption>
+                </figure>
+                <p class="panel-hint">Glissez pour tourner autour de la plage, molette ou pincement pour zoomer sur le surfeur.</p>
+            </aside>
+
+            <button type="button" class="hud btn btn-panel" data-action="ocean#togglePanel" data-ocean-target="panelToggle"
+                    aria-controls="ocean-settings" aria-expanded="false">Houle</button>
+
+            <dialog class="webcam-dialog" data-ocean-target="webcamDialog" data-action="cancel->ocean#closeTimelapse close->ocean#closeTimelapse click->ocean#clickOutside" aria-labelledby="webcam-dialog-title">
+                <div class="webcam-dialog-head">
+                    <p id="webcam-dialog-title" data-ocean-target="webcamDialogTitle"></p>
+                    <a class="btn" data-ocean-target="webcamDialogLive" target="_blank" rel="noopener" hidden>Voir le direct ↗</a>
+                    <button type="button" class="btn" data-action="ocean#closeTimelapse" aria-label="Fermer">✕</button>
+                </div>
+                <iframe data-ocean-target="webcamPlayer" title="Timelapse de la journée" allowfullscreen></iframe>
+                <p class="webcam-dialog-credit">Timelapse de la journée, jusqu'à la dernière image. Webcams fournies par
+                    <a href="https://www.windy.com/" target="_blank" rel="noopener">windy.com</a>.</p>
+            </dialog>
+
+            <div class="stage-fallback" data-ocean-target="fallback" hidden>
+                <p>Votre navigateur ou votre appareil ne prend pas en charge WebGL 2 : la plage ne peut pas s'afficher.</p>
+            </div>
+            <noscript><div class="stage-fallback"><p>Le bac à houle a besoin de JavaScript pour fonctionner.</p></div></noscript>
+        </section>
+
+        <section class="about" id="a-propos" aria-labelledby="about-title">
+            <h2 id="about-title">Comment ça marche ?</h2>
+            <div class="about-grid">
+                <article>
+                    <h3>La houle du moment</h3>
+                    <p>
+                        La ville est située sur la carte, puis la houle qui l'atteint en ce moment est demandée au service
+                        Open-Meteo : sa hauteur (du creux à la crête), sa période, la direction d'où elle vient et la
+                        température de l'eau. Ces valeurs viennent de modèles de vagues, recalculés plusieurs fois par jour.
+                    </p>
+                </article>
+                <article>
+                    <h3>À l'échelle d'un surfeur</h3>
+                    <p>
+                        Le surfeur mesure 1,75 m, sur une planche de 2 m : une houle d'un mètre lui arrive aux hanches.
+                        Comme dans les bassins à houle des laboratoires, les durées sont réduites dans le même rapport que
+                        les longueurs (similitude de Froude) : les vagues gardent leurs proportions, et donc leur allure.
+                    </p>
+                </article>
+                <article>
+                    <h3>Une vraie simulation</h3>
+                    <p>
+                        Au fond du bac, un batteur pousse la houle comme dans un bassin d'essais. Les vagues ralentissent et
+                        se creusent en arrivant sur la pente de sable, puis meurent sur la plage : c'est la même simulation
+                        de l'eau que dans le bac à sable, calculée sur la carte graphique.
+                    </p>
+                </article>
+                <article>
+                    <h3>Partager une plage</h3>
+                    <p>
+                        L'adresse de la page contient la ville (par exemple <code>/houle?ville=Hossegor</code>) : envoyez-la,
+                        elle s'ouvre sur la même plage avec la houle du moment. Les données sont rafraîchies toutes les
+                        15 minutes tant que la page reste ouverte.
+                    </p>
+                </article>
+            </div>
+        </section>
+    </main>
+{% endblock %}
