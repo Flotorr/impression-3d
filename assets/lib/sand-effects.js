@@ -1,6 +1,7 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PHYSICS } from './sand-physics.js';
-import { glassShader, puddleShader, rainShader, steamShader, waterfallShader } from './sand-render-shaders.js';
+import { glassShader, puddleShader, rainShader, smokeShader, steamShader, treeShader, waterfallShader } from './sand-render-shaders.js';
 
 export const WALL_HEIGHT = 0.48;
 export const FLOOR = -0.1; // the table the tank stands on
@@ -291,4 +292,71 @@ export function createSteam(shared, count = 6000) {
     steam.renderOrder = 5;
 
     return steam;
+}
+
+/** Smoke over the fires (see smokeShader). */
+export function createSmoke(shared, count = 16000) {
+    const seeds = new Float32Array(count * 3);
+    for (let i = 0; i < count * 3; i++) {
+        seeds[i] = Math.random();
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(count * 3), 3));
+    geometry.setAttribute('aSeed', new THREE.Float32BufferAttribute(seeds, 3));
+    const uniforms = { ...shared, uWorld: { value: PHYSICS.world }, uFocal: { value: 1000 } };
+    const smoke = new THREE.Points(geometry, new THREE.ShaderMaterial({ ...smokeShader, uniforms, transparent: true, depthWrite: false }));
+    smoke.frustumCulled = false;
+    smoke.renderOrder = 6;
+
+    return smoke;
+}
+
+const TREE_GRID = 48; // slots per side: one possible tree every 4 cm of the tank
+
+// One low-poly part of a tree; aPart 0 = trunk, 1 = crown.
+function treePart(geometry, part) {
+    const flat = geometry.index ? geometry.toNonIndexed() : geometry;
+    flat.deleteAttribute('uv');
+    flat.deleteAttribute('normal');
+    flat.setAttribute('aPart', new THREE.Float32BufferAttribute(new Float32Array(flat.attributes.position.count).fill(part), 1));
+
+    return flat;
+}
+
+const trunk = () => treePart(new THREE.CylinderGeometry(0.003, 0.0045, 0.035, 5).translate(0, 0.0175, 0), 0);
+const TREE_MODELS = {
+    pine: () => [
+        trunk(),
+        treePart(new THREE.ConeGeometry(0.024, 0.05, 7).translate(0, 0.045, 0), 1),
+        treePart(new THREE.ConeGeometry(0.017, 0.04, 7).translate(0, 0.07, 0), 1),
+    ],
+    round: () => [
+        trunk(),
+        treePart(new THREE.IcosahedronGeometry(0.024, 0).translate(0, 0.05, 0), 1),
+        treePart(new THREE.IcosahedronGeometry(0.016, 0).translate(0.01, 0.068, 0.004), 1),
+    ],
+};
+
+/** Trees growing out of the simulation (see treeShader): a jittered grid of slots, pines and broadleaves. */
+export function createTrees(shared) {
+    const slots = { pine: [], round: [] };
+    for (let i = 0; i < TREE_GRID; i++) {
+        for (let j = 0; j < TREE_GRID; j++) {
+            const u = (i + 0.15 + 0.7 * Math.random()) / TREE_GRID;
+            const v = (j + 0.15 + 0.7 * Math.random()) / TREE_GRID;
+            (Math.random() < 0.45 ? slots.pine : slots.round).push(u, v, Math.random(), Math.random());
+        }
+    }
+    const material = new THREE.ShaderMaterial({ ...treeShader, uniforms: { ...shared, uWorld: { value: PHYSICS.world } } });
+    const group = new THREE.Group();
+    for (const [kind, data] of Object.entries(slots)) {
+        const geometry = new THREE.InstancedBufferGeometry().copy(mergeGeometries(TREE_MODELS[kind]()));
+        geometry.setAttribute('aSlot', new THREE.InstancedBufferAttribute(new Float32Array(data), 4));
+        geometry.instanceCount = data.length / 4;
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.frustumCulled = false;
+        group.add(mesh);
+    }
+
+    return group;
 }

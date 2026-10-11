@@ -31,6 +31,14 @@
 
             <div class="hud hud-tools" role="toolbar" aria-label="Outils" data-sandbox-target="tools"></div>
 
+            <button type="button" class="hud btn btn-world" data-action="sandbox#newWorld"
+                    title="Nouvelles dunes, un nouveau lac, de nouvelles prairies">🌍 Nouveau monde</button>
+
+            <div class="hud hud-time" role="group" aria-label="Temps">
+                <span class="time-clock" data-sandbox-target="clock">Jour 1 · 10:00</span>
+                <div class="time-speeds" data-sandbox-target="speeds"></div>
+            </div>
+
             <aside class="hud hud-panel" id="sandbox-settings" aria-label="Réglages">
                 <div class="control">
                     <label for="brush-size">Taille</label>
@@ -56,15 +64,19 @@
                     <input type="checkbox" checked data-sandbox-target="erosion" data-action="sandbox#toggleErosion">
                     <span>Érosion</span>
                 </label>
+                <label class="switch">
+                    <input type="checkbox" checked data-sandbox-target="dayCycle" data-action="sandbox#toggleDayCycle">
+                    <span>Jour et nuit</span>
+                </label>
+                <p class="panel-note">Accéléré (×5 et plus), le temps fait pousser les plantes et l'eau s'évapore au soleil.</p>
                 <p class="panel-title">Vider / remplir</p>
                 <div class="panel-actions">
                     <button type="button" class="btn" data-action="sandbox#clearSand">Retirer le sable</button>
                     <button type="button" class="btn" data-action="sandbox#clearLava">Retirer la lave</button>
+                    <button type="button" class="btn" data-action="sandbox#clearPlants">Retirer les plantes</button>
                     <button type="button" class="btn" data-action="sandbox#drain">Vider l'eau</button>
                     <button type="button" class="btn" data-action="sandbox#fillWater">Remplir d'eau</button>
-                    <button type="button" class="btn" data-action="sandbox#emptyTank">Bac vide</button>
-                    <button type="button" class="btn" data-action="sandbox#newDunes">Nouvelles dunes</button>
-                </div>
+                    <button type="button" class="btn" data-action="sandbox#emptyTank">Bac vide</button>                </div>
                 <p class="panel-title">Bac</p>
                 <div class="panel-actions">
                     <button type="button" class="btn" data-action="sandbox#clearSprings" data-sandbox-target="springs">Aucune source</button>
@@ -74,7 +86,8 @@
                 </div>
                 <p class="panel-hint">
                     Clic gauche ou un doigt : outil. Clic droit ou deux doigts : tourner. Molette ou pincement : zoom vers le pointeur.
-                    <span class="hint-keys"><kbd>1</kbd>–<kbd>0</kbd> et <kbd>O</kbd> outils, <kbd>[</kbd> <kbd>]</kbd> taille.</span>
+                    <span class="hint-keys"><kbd>1</kbd>–<kbd>0</kbd>, <kbd>G</kbd>, <kbd>F</kbd> et <kbd>O</kbd> outils, <kbd>[</kbd> <kbd>]</kbd> taille,
+                        <kbd>P</kbd> pause, <kbd>-</kbd> <kbd>+</kbd> vitesse du temps.</span>
                 </p>
             </aside>
 
@@ -137,6 +150,26 @@
                     <p>
                         Avec le marteau, cliquez sur une vitre : elle vole en éclats. De ce côté, l'eau se déverse en cascade
                         et forme une flaque sur la table, et le sable s'écoule jusqu'à retrouver sa pente naturelle.
+                    </p>
+                </article>
+                <article>
+                    <h3>Herbe, arbres et feu</h3>
+                    <p>
+                        L'herbe pousse de jour sur le sable humide : l'humidité monte de l'eau à travers le sol, et la prairie
+                        s'étend de proche en proche. Elle jaunit et meurt quand le sol sèche, pourrit sous l'eau ; la mousse
+                        couvre la roche humide, et les arbres finissent par sortir des vieilles prairies. Leurs racines tiennent
+                        le sable : une berge plantée garde une pente plus raide et résiste au courant. La lave et l'outil Feu
+                        enflamment la végétation ; le feu avance tant qu'il trouve de quoi brûler, s'arrête à l'eau et laisse
+                        une cendre sur laquelle l'herbe repousse plus vite.
+                    </p>
+                </article>
+                <article>
+                    <h3>Accélérer le temps</h3>
+                    <p>
+                        Une journée dure dix minutes ; à ×100, elle passe en six secondes. Le soleil tourne, la nuit tombe et
+                        la lave éclaire le bac. La vie et la météo suivent l'accélération sans rien coûter ; la physique du sable
+                        et de l'eau, elle, demande plus de calculs : elle accélère jusqu'à ×4 selon ce que la machine permet.
+                        Tant que le temps est accéléré, l'eau s'évapore au soleil.
                     </p>
                 </article>
                 <article>

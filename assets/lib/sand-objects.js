@@ -25,7 +25,8 @@ const SURFACE = /* glsl */ `
 uniform sampler2D uTerrain;
 uniform sampler2D uLava;
 uniform sampler2D uWater;
-float groundAt(vec2 uv) { vec4 t = texture2D(uTerrain, uv); return t.r + t.b + t.a + texture2D(uLava, uv).r; }
+uniform sampler2D uEarth;
+float groundAt(vec2 uv) { vec4 t = texture2D(uTerrain, uv); return t.r + t.b + t.a + texture2D(uEarth, uv).r + texture2D(uLava, uv).r; }
 float surfaceAt(vec2 uv) { return groundAt(uv) + texture2D(uWater, uv).r; }
 `;
 
@@ -301,6 +302,7 @@ export class FloatingObjects {
             uObjects: { value: this.state.texture },
             uMax: { value: MAX_OBJECTS },
             uTerrain: shared.uTerrain,
+            uEarth: shared.uEarth,
             uLava: shared.uLava,
             uWater: shared.uWater,
             uTexel: shared.uTexel,

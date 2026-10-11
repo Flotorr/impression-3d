@@ -1,26 +1,28 @@
 /* stimulusFetch: 'lazy' */
 import { Controller } from '@hotwired/stimulus';
 import { SandScene } from '../lib/sand-scene.js';
-import { OBJECT_TYPES, SIDES, toolForKey, TOOLS } from '../lib/sand-physics.js';
+import { clockLabel, OBJECT_TYPES, SIDES, TIME, toolForKey, TOOLS } from '../lib/sand-physics.js';
 
 const BRUSH_COLOURS = {
     dig: '#e0763c', raise: '#f2c14e', clay: '#c4623d', rock: '#8d9299', push: '#ffffff',
-    water: '#3fa7d6', lava: '#ff7a1a', objects: '#ffffff', spring: '#3fa7d6', sponge: '#a5ecff', hammer: '#ffffff',
+    water: '#3fa7d6', lava: '#ff7a1a', seeds: '#7ccf52', fire: '#ff5a1f',
+    objects: '#ffffff', spring: '#3fa7d6', sponge: '#a5ecff', hammer: '#ffffff',
 };
 const numberFormat = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const SIZE = { min: 0.03, max: 0.2 }; // brush radius in uv units
 
 /**
- * Sandbox page: builds the tool bar, drives the 3D scene, handles keyboard shortcuts and the PNG capture.
+ * Sandbox page: builds the tool bar and the time bar, drives the 3D scene, handles keyboard shortcuts and the PNG capture.
  */
 export default class extends Controller {
     static targets = [
         'viewport', 'tools', 'size', 'strength', 'waterSpeed', 'waterSpeedOutput', 'rain', 'erosion', 'springs', 'repair',
-        'objectType', 'clearObjects', 'toast', 'panelToggle', 'fallback',
+        'objectType', 'clearObjects', 'toast', 'panelToggle', 'fallback', 'speeds', 'clock', 'dayCycle',
     ];
 
     connect() {
         this.renderTools();
+        this.renderSpeeds();
         this.renderObjectTypes();
         try {
             this.scene = new SandScene(this.viewportTarget, {
@@ -35,6 +37,7 @@ export default class extends Controller {
         this.scene.onSpringsChange = (springs) => this.updateSprings(springs);
         this.scene.onPanesChange = (broken) => this.panesChanged(broken);
         this.scene.onObjectsChange = (count) => this.objectsChanged(count);
+        this.scene.onTick = (clock, light) => this.showTime(clock, light);
         this.scene.objectType = this.objectTypeTarget.value;
         this.objectsChanged(0);
         this.selectTool('dig', { silent: true });
@@ -45,6 +48,8 @@ export default class extends Controller {
         this.scene.setRain(this.rainTarget.checked);
         this.element.classList.toggle('is-raining', this.rainTarget.checked);
         this.toggleErosion();
+        this.toggleDayCycle();
+        this.selectSpeed(TIME.initial, { silent: true });
         this.updateSprings([]);
         this.repairTarget.disabled = true;
 
@@ -96,10 +101,23 @@ export default class extends Controller {
         this.scene.sim.erosion = this.erosionTarget.checked;
     }
 
-    newDunes() {
+    toggleDayCycle() {
+        this.scene.setDayCycle(this.dayCycleTarget.checked);
+    }
+
+    pickSpeed(event) {
+        this.selectSpeed(Number(event.currentTarget.dataset.speed));
+    }
+
+    clearPlants() {
+        this.scene.sim.clearPlants();
+        this.toast('Plantes retirées.');
+    }
+
+    newWorld() {
         this.scene.sim.reset();
-        this.toast('Nouvelles dunes.');
-        this.track('nouvelles-dunes');
+        this.toast('Nouveau monde.');
+        this.track('nouveau-monde');
     }
 
     clearSand() {
@@ -196,6 +214,55 @@ export default class extends Controller {
         }
     }
 
+    renderSpeeds() {
+        this.speedButtons = TIME.speeds.map((speed) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'time-speed';
+            button.dataset.speed = String(speed);
+            button.dataset.action = 'sandbox#pickSpeed';
+            button.setAttribute('aria-pressed', 'false');
+            button.textContent = speed === 0 ? '⏸' : `×${speed}`;
+            button.title = speed === 0 ? 'Pause (touche P)' : speed === 1 ? 'Temps réel' : `Temps accéléré ×${speed} : l'eau s'évapore au soleil`;
+            if (speed === 0) {
+                button.setAttribute('aria-label', 'Pause');
+            }
+
+            return button;
+        });
+        this.speedsTarget.replaceChildren(...this.speedButtons);
+    }
+
+    selectSpeed(speed, { silent = false } = {}) {
+        if (speed > 0) {
+            this.lastSpeed = speed; // P resumes at this speed
+        }
+        this.speed = speed;
+        this.scene.setSpeed(speed);
+        for (const button of this.speedButtons) {
+            button.setAttribute('aria-pressed', String(Number(button.dataset.speed) === speed));
+        }
+        this.element.classList.toggle('is-paused', speed === 0);
+        if (!silent) {
+            this.track('vitesse-temps', { x: speed });
+        }
+    }
+
+    /** Clock of the time bar and darkness of the sky, written only when they change (this runs every frame). */
+    showTime(clock, light) {
+        const icon = light.daylight === 0 ? '🌙' : light.daylight < 1 ? '🌅' : '☀️';
+        const label = `${icon} ${clockLabel(clock)}`;
+        if (label !== this.clockLabel) {
+            this.clockLabel = label;
+            this.clockTarget.textContent = label;
+        }
+        const night = (1 - light.daylight).toFixed(2);
+        if (night !== this.night) {
+            this.night = night;
+            this.element.style.setProperty('--night', night);
+        }
+    }
+
     renderObjectTypes() {
         // The surfer belongs to the wave tank (/houle).
         const types = OBJECT_TYPES.filter(({ id }) => id !== 'surfer');
@@ -242,8 +309,15 @@ export default class extends Controller {
             return;
         }
         const tool = toolForKey(event.key.toLowerCase());
+        const speedIndex = TIME.speeds.indexOf(this.speed);
         if (tool) {
             this.selectTool(tool.id);
+        } else if (event.key.toLowerCase() === 'p') {
+            this.selectSpeed(this.speed === 0 ? this.lastSpeed ?? TIME.initial : 0);
+        } else if (event.key === '+' || event.key === '=') {
+            this.selectSpeed(TIME.speeds[Math.min(TIME.speeds.length - 1, speedIndex + 1)]);
+        } else if (event.key === '-') {
+            this.selectSpeed(TIME.speeds[Math.max(0, speedIndex - 1)]);
         } else if (event.key === '[' || event.key === ']') {
             const step = event.key === ']' ? 10 : -10;
             this.sizeTarget.value = String(Math.min(100, Math.max(0, Number(this.sizeTarget.value) + step)));

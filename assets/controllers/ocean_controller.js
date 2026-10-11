@@ -24,6 +24,7 @@ export default class extends Controller {
             this.scene = new SandScene(this.viewportTarget, {
                 reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
                 tools: false,
+                ecology: false,
             });
         } catch {
             this.fallbackTarget.hidden = false;

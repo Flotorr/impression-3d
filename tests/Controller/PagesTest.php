@@ -22,7 +22,7 @@ final class PagesTest extends WebTestCase
 
         $stage = $crawler->filter('[data-controller="sandbox"]');
         $this->assertCount(1, $stage);
-        foreach (['viewport', 'tools', 'size', 'strength', 'waterSpeed', 'rain', 'erosion', 'springs', 'repair', 'fallback'] as $target) {
+        foreach (['viewport', 'tools', 'size', 'strength', 'waterSpeed', 'rain', 'erosion', 'springs', 'repair', 'fallback', 'speeds', 'clock', 'dayCycle'] as $target) {
             $this->assertCount(1, $stage->filter(sprintf('[data-sandbox-target="%s"]', $target)), $target);
         }
         $this->assertNotNull($stage->filter('[data-sandbox-target="fallback"]')->attr('hidden'), 'fallback hidden until WebGL fails');

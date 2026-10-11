@@ -1,13 +1,21 @@
 // GLSL for the simulation passes. Every pass draws a full-screen quad into one N × N float texture.
 //
-// Each column of the tank is a stack: rock at the bottom, then clay, then sand, with lava and water on top.
+// Each column of the tank is a stack: rock at the bottom, then clay, earth and sand, with lava and water on top.
+// A brush that adds a material turns the loose layers above its place in the stack into it (rock turns the
+// clay, earth and sand under the brush into rock), so the order always holds.
 //
 //   terrain   r: sand height   g: wetness (0–1)   b: clay height   a: rock height
+//   earth     r: earth height (its own texture: the terrain one is full)
 //   lava      r: depth         g: temperature (1 molten → 0 cold)   b: steam (contact with water, for the render)
 //   water     r: depth         g, b: velocity along u and v (world units / s)   a: suspended sediment
 //   flux      water outflow towards the left, right, down and up neighbours (virtual pipes)
 //   lavaFlux  the same for lava
 //   slide     sand leaving towards the 8 neighbours (avalanches): cardinal and diagonal shares, two textures
+//   plants    r: grass   g: moss   b: trees (maturity of the wood: the 3D trees grow out of it)   a: ash   (0–1)
+//   soil      r: moisture of the ground (spreads from the water)   g: fire (0–1)
+//
+// Plants and fire run on the clock of life (see TIME in sand-physics.js), which the accelerator speeds up
+// without touching the physics time step.
 //
 // References: Mei, Decaudin & Hu, "Fast Hydraulic Erosion Simulation and Visualization on GPU" (2007),
 // for the pipe model and the erosion / deposition step.
@@ -66,10 +74,20 @@ float falloff(vec2 uv, vec2 centre, float radius) {
 }
 `;
 
-// Needs uTerrain and uLava.
+// Needs uTerrain and uLava; declares uEarth.
 const GROUND = /* glsl */ `
-float solidAt(vec2 uv) { vec4 t = texture2D(uTerrain, uv); return t.r + t.b + t.a; }
+uniform sampler2D uEarth;
+float solidAt(vec2 uv) { vec4 t = texture2D(uTerrain, uv); return t.r + t.b + t.a + texture2D(uEarth, uv).r; }
 float groundAt(vec2 uv) { return solidAt(uv) + texture2D(uLava, uv).r; }
+`;
+
+// Needs uPlants. How much the roots of the grass and the trees hold the sand of a cell (0–1).
+const ROOTS = /* glsl */ `
+float rootsAt(vec2 uv) { vec4 p = texture2D(uPlants, uv); return clamp(p.r * 0.6 + p.b, 0.0, 1.0); }
+`;
+
+const HASH = /* glsl */ `
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 `;
 
 const NOISE = /* glsl */ `
@@ -106,21 +124,52 @@ float fbm(vec2 p) {
 
 export { NOISE };
 
-/** Initial dunes with a hollow, over a bed of rock that breaks the surface here and there. */
+// A new world, column by column: vec4(sand, earth, clay, rock). uKind (see WORLDS): 0 dunes of sand over a bed
+// of rock that breaks the surface here and there; 1 rolling hills of earth, the rock rarely showing;
+// 2 the same hills with patches of sand blown over them. Always a hollow with a lake.
+const WORLD = /* glsl */ `
+uniform vec2 uSeed;
+uniform vec2 uBasin;
+uniform int uKind;
+vec4 worldColumn(vec2 uv) {
+    vec2 p = uv * 2.6 + uSeed;
+    float hollow = smoothstep(0.3, 0.0, length(uv - uBasin));
+    if (uKind == 0) {
+        float dunes = 0.13 + 0.07 * fbm(p);
+        // Wind ripples, stretched along one direction like real dunes
+        dunes += 0.018 * sin(uv.x * 30.0 + 4.0 * fbm(p * 1.7)) * smoothstep(-0.2, 0.4, fbm(p * 0.7));
+        float surface = max(0.02, dunes - 0.11 * hollow);
+        float rock = 0.025 + 0.16 * smoothstep(0.15, 0.55, fbm(p * 0.8 + 31.0)) * (1.0 - hollow);
+        return vec4(max(0.0, surface - rock), 0.0, 0.0, rock);
+    }
+    float hills = 0.14 + 0.08 * fbm(p * 0.7) + 0.012 * fbm(p * 4.0);
+    float surface = max(0.03, hills - 0.12 * hollow);
+    float rock = min(surface, 0.02 + 0.2 * smoothstep(0.35, 0.7, fbm(p * 0.8 + 31.0)) * (1.0 - hollow));
+    float sand = 0.0;
+    if (uKind == 2) {
+        float drifts = smoothstep(0.0, 0.35, fbm(p * 1.3 + 57.0)) * (1.0 - 0.7 * hollow);
+        sand = min(surface - rock, drifts * (0.015 + 0.012 * sin(uv.x * 34.0 + 4.0 * fbm(p * 1.7))));
+    }
+    return vec4(max(0.0, sand), max(0.0, surface - rock - sand), 0.0, rock);
+}
+`;
+
 export const initTerrainShader = /* glsl */ `
 ${COMMON}
 ${NOISE}
-uniform vec2 uSeed;
-uniform vec2 uBasin;
+${WORLD}
 void main() {
-    vec2 p = vUv * 2.6 + uSeed;
-    float dunes = 0.13 + 0.07 * fbm(p);
-    // Wind ripples, stretched along one direction like real dunes
-    dunes += 0.018 * sin(vUv.x * 30.0 + 4.0 * fbm(p * 1.7)) * smoothstep(-0.2, 0.4, fbm(p * 0.7));
-    float hollow = smoothstep(0.3, 0.0, length(vUv - uBasin));
-    float surface = max(0.02, dunes - 0.11 * hollow);
-    float rock = 0.025 + 0.16 * smoothstep(0.15, 0.55, fbm(p * 0.8 + 31.0)) * (1.0 - hollow);
-    gl_FragColor = vec4(max(0.0, surface - rock), 0.0, 0.0, rock);
+    vec4 c = worldColumn(vUv);
+    gl_FragColor = vec4(c.x, 0.0, c.z, c.w);
+}
+`;
+
+export const initEarthShader = /* glsl */ `
+${COMMON}
+${NOISE}
+${WORLD}
+void main() {
+    gl_FragColor = vec4(worldColumn(vUv).y, 0.0, 0.0, 0.0);
 }
 `;
 
@@ -128,16 +177,17 @@ void main() {
 export const initWaterShader = /* glsl */ `
 ${COMMON}
 uniform sampler2D uTerrain;
+uniform sampler2D uEarth;
 uniform vec2 uBasin;
 uniform float uLevel;
 void main() {
     vec4 t = texture2D(uTerrain, vUv);
     float lake = step(length(vUv - uBasin), 0.32);
-    gl_FragColor = vec4(max(0.0, uLevel - (t.r + t.b + t.a)) * lake, 0.0, 0.0, 0.0);
+    gl_FragColor = vec4(max(0.0, uLevel - (t.r + t.b + t.a + texture2D(uEarth, vUv).r)) * lake, 0.0, 0.0, 0.0);
 }
 `;
 
-// Brush modes: 1 dig, 2 sand, 3 push, 4 water, 6 sponge, 7 rock, 8 clay, 9 lava.
+// Brush modes: 1 dig, 2 sand, 3 push, 4 water, 6 sponge, 7 rock, 8 clay, 9 lava, 10 seeds, 11 fire, 12 earth.
 const BRUSH_UNIFORMS = /* glsl */ `
 uniform int uMode;
 uniform vec2 uBrush;
@@ -145,24 +195,28 @@ uniform float uRadius;
 uniform float uAmount;
 `;
 
-export const brushTerrainShader = /* glsl */ `
-${COMMON}
-${BRUSH_UNIFORMS}
+// The terrain brush changes the terrain and the earth together: both passes run this same function on the same
+// inputs, and each keeps its own part of the result.
+const BRUSH_STACK = /* glsl */ `
 uniform sampler2D uTerrain;
+uniform sampler2D uEarth;
 uniform vec2 uDrag;
 uniform float uMaxSand;
 uniform float uDigClay;
 uniform float uDigRock;
-void main() {
-    vec4 t = texture2D(uTerrain, vUv);
+uniform float uDigEarth;
+void applyBrush(inout vec4 t, inout float e) {
     float f = falloff(vUv, uBrush, uRadius);
     float amount = uAmount * f;
-    float room = max(0.0, uMaxSand - (t.r + t.b + t.a));
+    float room = max(0.0, uMaxSand - (t.r + t.b + t.a + e));
     if (uMode == 1) {
-        // The shovel takes the sand first, then bites slowly into the clay, and barely into the rock.
+        // The shovel takes the sand first, then the earth, bites slowly into the clay, and barely into the rock.
         float sand = min(t.r, amount);
         t.r -= sand;
         amount -= sand;
+        float earth = min(e, amount * uDigEarth);
+        e -= earth;
+        amount -= earth / uDigEarth;
         float clay = min(t.b, amount * uDigClay);
         t.b -= clay;
         amount -= clay / uDigClay;
@@ -172,20 +226,52 @@ void main() {
     } else if (uMode == 3) {
         // Bulldozer: each cell takes the sand that was behind it along the gesture.
         t.r = bilinear(uTerrain, vUv - uDrag * f).r;
-    } else if (uMode == 7 || uMode == 8) {
-        // Rock and clay go on top: the loose layers under the brush are turned into the new material.
-        float turned = t.r * min(1.0, f * 20.0 * uAmount);
+    } else if (uMode == 7 || uMode == 8 || uMode == 12) {
+        // Rock, clay and earth go on top: the loose layers above their place in the stack, under the brush,
+        // are turned into the new material.
+        float k = min(1.0, f * 20.0 * uAmount);
+        float turned = t.r * k;
         t.r -= turned;
         float added = turned + min(room, amount);
-        if (uMode == 7) {
-            float clay = t.b * min(1.0, f * 20.0 * uAmount);
-            t.b -= clay;
-            t.a += added + clay;
+        if (uMode == 12) {
+            e += added;
         } else {
-            t.b += added;
+            float earth = e * k;
+            e -= earth;
+            added += earth;
+            if (uMode == 7) {
+                float clay = t.b * k;
+                t.b -= clay;
+                t.a += added + clay;
+            } else {
+                t.b += added;
+            }
         }
     }
+}
+`;
+
+export const brushTerrainShader = /* glsl */ `
+${COMMON}
+${BRUSH_UNIFORMS}
+${BRUSH_STACK}
+void main() {
+    vec4 t = texture2D(uTerrain, vUv);
+    float e = texture2D(uEarth, vUv).r;
+    applyBrush(t, e);
     gl_FragColor = t;
+}
+`;
+
+export const brushEarthShader = /* glsl */ `
+${COMMON}
+${BRUSH_UNIFORMS}
+${BRUSH_STACK}
+void main() {
+    vec4 t = texture2D(uTerrain, vUv);
+    float e = texture2D(uEarth, vUv).r;
+    applyBrush(t, e);
+    gl_FragColor = vec4(e, 0.0, 0.0, 0.0);
 }
 `;
 
@@ -199,9 +285,11 @@ uniform float uSpringRate;
 uniform float uRain;
 uniform float uFrameDt;
 uniform float uTime;
+uniform float uEvaporate; // depth lost this frame (only while time is accelerated)
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 void main() {
     vec4 w = texture2D(uWater, vUv);
+    w.r = max(0.0, w.r - uEvaporate);
     float f = falloff(vUv, uBrush, uRadius);
     if (uMode == 4) {
         w.r += uAmount * f;
@@ -320,26 +408,36 @@ uniform float uCapacity;
 uniform float uDissolve;
 uniform float uDeposit;
 uniform float uClayErosion;
+uniform float uEarthErosion;
 uniform float uErosion; // 0 = off
+uniform sampler2D uPlants;
+uniform float uRootErosion;
 ${GROUND}
-// Material the water picks up this step (> 0) or lets settle as sand (< 0). Sand goes first, then clay,
-// which resists (uClayErosion); rock and lava never erode. clayPart is the share taken from the clay.
-float exchange(out float clayPart) {
+${ROOTS}
+// Material the water picks up this step (> 0) or lets settle as sand (< 0). Sand goes first, then earth and
+// clay, which resist (uEarthErosion, uClayErosion); rock and lava never erode. earthPart and clayPart are the
+// shares taken from the earth and the clay.
+float exchange(out float earthPart, out float clayPart) {
     vec4 w = texture2D(uWater, vUv);
     vec4 t = texture2D(uTerrain, vUv);
+    earthPart = 0.0;
     clayPart = 0.0;
     if (texture2D(uLava, vUv).r > 0.0005) return 0.0;
     vec2 grad = vec2(groundAt(R()) - groundAt(L()), groundAt(U()) - groundAt(D())) / (2.0 * uCell);
     float sinTilt = length(grad) / sqrt(1.0 + dot(grad, grad));
     float depthFactor = clamp(w.r / 0.01, 0.0, 1.0);
-    float capacity = uCapacity * max(sinTilt, 0.05) * length(w.gb) * depthFactor;
+    // Roots hold the ground against the current.
+    float capacity = uCapacity * max(sinTilt, 0.05) * length(w.gb) * depthFactor * (1.0 - uRootErosion * rootsAt(vUv));
     if (w.a >= capacity) {
         return -min(w.a, uDeposit * (w.a - capacity) * uDt) * uErosion;
     }
     float wanted = uDissolve * (capacity - w.a) * uDt * uErosion;
     float sand = min(t.r, wanted);
-    clayPart = min(t.b, (wanted - sand) * uClayErosion);
-    return sand + clayPart;
+    float left = wanted - sand;
+    earthPart = min(texture2D(uEarth, vUv).r, left * uEarthErosion);
+    left -= earthPart / uEarthErosion;
+    clayPart = min(t.b, left * uClayErosion);
+    return sand + earthPart + clayPart;
 }
 `;
 
@@ -350,10 +448,10 @@ uniform float uDrying;
 void main() {
     vec4 t = texture2D(uTerrain, vUv);
     float d = texture2D(uWater, vUv).r;
-    float clayPart;
-    float moved = exchange(clayPart);
+    float earthPart, clayPart;
+    float moved = exchange(earthPart, clayPart);
     t.b -= clayPart;
-    t.r -= moved - clayPart; // deposits (moved < 0) settle as sand
+    t.r -= moved - earthPart - clayPart; // deposits (moved < 0) settle as sand
     // Sand under water is soaked; a film of water (rain) soaks it gradually; it dries slowly once the water has gone.
     t.g = d > 0.0015 ? 1.0 : d > 0.0001 ? min(1.0, t.g + 1.5 * uDt) : max(0.0, t.g - uDrying * uDt);
     gl_FragColor = t;
@@ -365,9 +463,19 @@ ${COMMON}
 ${EROSION}
 void main() {
     vec4 w = texture2D(uWater, vUv);
-    float clayPart;
-    w.a += exchange(clayPart);
+    float earthPart, clayPart;
+    w.a += exchange(earthPart, clayPart);
     gl_FragColor = w;
+}
+`;
+
+export const erosionEarthShader = /* glsl */ `
+${COMMON}
+${EROSION}
+void main() {
+    float earthPart, clayPart;
+    exchange(earthPart, clayPart);
+    gl_FragColor = vec4(texture2D(uEarth, vUv).r - earthPart, 0.0, 0.0, 0.0);
 }
 `;
 
@@ -375,6 +483,7 @@ void main() {
 // rather than square pyramids. Only sand slides; it compares the full ground heights (rock, clay, lava
 // included). The pass runs twice on the same input: uDiagonal 0 writes the shares sent left, right, down
 // and up; uDiagonal 1 those sent down-left, down-right, up-left and up-right.
+// uMaterial 0 moves the sand; 1 the earth, at its own angles of repose, where no sand covers it.
 export const slideOutShader = /* glsl */ `
 ${COMMON}
 uniform sampler2D uTerrain;
@@ -385,12 +494,22 @@ uniform float uTalusWet;
 uniform float uTalusUnder;
 uniform float uSlideRate;
 uniform float uDiagonal;
+uniform sampler2D uPlants;
+uniform float uTalusRoots;
+uniform float uMaterial;
+uniform vec3 uTalusEarth; // dry, wet, under water
 ${GROUND}
+${ROOTS}
 void main() {
     vec4 t = texture2D(uTerrain, vUv);
     float d = texture2D(uWater, vUv).r;
     float h = groundAt(vUv);
-    float repose = (d > 0.0015 ? uTalusUnder : mix(uTalusDry, uTalusWet, t.g)) * uCell;
+    bool earth = uMaterial > 0.5;
+    float repose = earth
+        ? (d > 0.0015 ? uTalusEarth.z : mix(uTalusEarth.x, uTalusEarth.y, t.g))
+        : (d > 0.0015 ? uTalusUnder : mix(uTalusDry, uTalusWet, t.g));
+    // Grass and trees hold their slope: a planted bank stands steeper.
+    repose = mix(repose, max(repose, uTalusRoots), rootsAt(vUv)) * uCell;
     vec4 open = openSides();
     vec2 tx = vec2(uTexel.x, 0.0);
     vec2 ty = vec2(0.0, uTexel.y);
@@ -406,8 +525,8 @@ void main() {
     float steepest = max(max(max(excessC.x, excessC.y), max(excessC.z, excessC.w)),
                          max(max(excessD.x, excessD.y), max(excessD.z, excessD.w)));
     // Moving half the steepest excess, shared by steepness, keeps the scheme stable and the mass exact.
-    // Sand buried under lava stays put.
-    float loose = texture2D(uLava, vUv).r > 0.0005 ? 0.0 : t.r;
+    // Sand buried under lava stays put; so does earth under sand.
+    float loose = texture2D(uLava, vUv).r > 0.0005 ? 0.0 : !earth ? t.r : t.r < 0.0005 ? texture2D(uEarth, vUv).r : 0.0;
     float moved = min(loose, 0.5 * steepest * uSlideRate);
     vec4 share = uDiagonal > 0.5 ? excessD : excessC;
     gl_FragColor = sum > 0.0 ? share / sum * moved : vec4(0.0);
@@ -448,7 +567,8 @@ uniform sampler2D uLavaFlux;
 uniform float uGravity;
 uniform float uLavaFluidity;
 uniform float uLavaDamping;
-float solid(vec2 uv) { vec4 t = texture2D(uTerrain, uv); return t.r + t.b + t.a; }
+uniform sampler2D uEarth;
+float solid(vec2 uv) { vec4 t = texture2D(uTerrain, uv); return t.r + t.b + t.a + texture2D(uEarth, uv).r; }
 float surface(vec2 uv) { return solid(uv) + texture2D(uLava, uv).r; }
 void main() {
     vec4 lava = texture2D(uLava, vUv);
@@ -506,16 +626,27 @@ export const lavaSolidifyTerrainShader = /* glsl */ `
 ${COMMON}
 ${SOLIDIFY}
 uniform sampler2D uTerrain;
+uniform sampler2D uEarth;
 void main() {
     vec4 t = texture2D(uTerrain, vUv);
     vec4 lava = texture2D(uLava, vUv);
-    // The new rock is on top: the sand and clay it covered are fused into it (the stack keeps rock at the bottom).
+    // The new rock is on top: the sand, earth and clay it covered are fused into it (the stack keeps rock at the bottom).
     if (solidifies(lava)) {
-        t.a += lava.r + t.r + t.b;
+        t.a += lava.r + t.r + t.b + texture2D(uEarth, vUv).r;
         t.r = 0.0;
         t.b = 0.0;
     }
     gl_FragColor = t;
+}
+`;
+
+export const lavaSolidifyEarthShader = /* glsl */ `
+${COMMON}
+${SOLIDIFY}
+uniform sampler2D uEarth;
+void main() {
+    vec4 e = texture2D(uEarth, vUv);
+    gl_FragColor = solidifies(texture2D(uLava, vUv)) ? vec4(0.0) : e;
 }
 `;
 
@@ -565,5 +696,377 @@ void main() {
     float bar = 0.02 * exp(-pow((vUv.y - barLine) / 0.05, 2.0)); // its top stays just under the still water
     float sand = 0.03 + (uLevel + 0.06) * shore + bar + 0.006 * fbm(vUv * 6.0) + 0.004 * sin(vUv.x * 40.0 + fbm(vUv * 3.0) * 3.0) * shore;
     gl_FragColor = vec4(sand, 0.0, 0.0, 0.0);
+}
+`;
+// --- Life: plants, soil moisture and fire ---------------------------------------------------------------
+
+/** Meadows and moss around the lake of a new world (over most of the land of earth), with a few groves; none on the water. */
+export const initPlantsShader = /* glsl */ `
+${COMMON}
+${NOISE}
+uniform sampler2D uTerrain;
+uniform sampler2D uEarth;
+uniform sampler2D uWater;
+uniform vec2 uSeed;
+uniform vec2 uBasin;
+uniform int uKind;
+void main() {
+    vec4 t = texture2D(uTerrain, vUv);
+    float e = texture2D(uEarth, vUv).r;
+    float dry = step(texture2D(uWater, vUv).r, 0.0005);
+    float near = uKind == 0 ? smoothstep(0.55, 0.3, length(vUv - uBasin)) : smoothstep(0.95, 0.4, length(vUv - uBasin));
+    float patches = smoothstep(-0.15, 0.3, fbm(vUv * 5.0 + uSeed * 0.37));
+    float cover = dry * near * patches;
+    bool soil = t.r + t.b + e > 0.002;
+    float grass = soil ? cover * (t.r < 0.002 && e > 0.002 ? 1.0 : 0.9) : 0.0;
+    float moss = soil ? 0.0 : cover * 0.7;
+    float trees = grass > 0.6 ? smoothstep(0.1, 0.5, fbm(vUv * 9.0 + uSeed.yx)) : 0.0;
+    gl_FragColor = vec4(grass, moss, trees, 0.0);
+}
+`;
+
+/** Damp ground around the lake of a new world, as after a rain (earth keeps its water further from the lake). */
+export const initSoilShader = /* glsl */ `
+${COMMON}
+uniform vec2 uBasin;
+uniform int uKind;
+void main() {
+    float reach = uKind == 0 ? 0.55 : 0.9;
+    gl_FragColor = vec4(smoothstep(reach, 0.2, length(vUv - uBasin)), 0.0, 0.0, 0.0);
+}
+`;
+
+export const brushPlantsShader = /* glsl */ `
+${COMMON}
+${BRUSH_UNIFORMS}
+uniform sampler2D uPlants;
+uniform sampler2D uTerrain;
+uniform sampler2D uEarth;
+void main() {
+    vec4 p = texture2D(uPlants, vUv);
+    vec4 t = texture2D(uTerrain, vUv);
+    float f = falloff(vUv, uBrush, uRadius);
+    if (uMode == 10) {
+        // Seeds: grass on sand, earth and clay, moss on bare rock. They only take where the ground is damp.
+        float sown = uAmount * f;
+        if (t.r + t.b + texture2D(uEarth, vUv).r > 0.002) {
+            p.r = min(1.0, p.r + sown);
+        } else if (t.a > 0.002) {
+            p.g = min(1.0, p.g + sown);
+        }
+    } else {
+        // Digging, pushing or covering the ground takes the plants (and the ash) with the top layer.
+        p *= 1.0 - (uMode == 3 ? f * 0.3 : min(1.0, f * 40.0 * uAmount));
+    }
+    gl_FragColor = p;
+}
+`;
+
+export const brushFireShader = /* glsl */ `
+${COMMON}
+${BRUSH_UNIFORMS}
+uniform sampler2D uSoil;
+void main() {
+    vec4 s = texture2D(uSoil, vUv);
+    s.g = max(s.g, step(0.15, falloff(vUv, uBrush, uRadius)));
+    gl_FragColor = s;
+}
+`;
+
+const LIFE_UNIFORMS = /* glsl */ `
+uniform sampler2D uTerrain;
+uniform sampler2D uLava;
+uniform sampler2D uWater;
+uniform sampler2D uPlants;
+uniform sampler2D uSoil;
+uniform sampler2D uEarth;
+uniform float uLifeDt;    // tank time elapsed this frame
+uniform float uLifeTime;  // tank time
+uniform float uDaylight;  // 0 at night, 1 in full sun
+`;
+
+/**
+ * Soil moisture and fire. Moisture spreads from cell to cell (a wall keeps it in), is lost slowly to the air
+ * and is saturated under water or wet sand. Fire catches from a burning neighbour or from hot lava, grows while
+ * there is fuel (grass, trees, a little moss) and dies out without it; damp ground, water and rain stop it.
+ */
+export const soilShader = /* glsl */ `
+${COMMON}
+${HASH}
+${LIFE_UNIFORMS}
+uniform float uMoistureSpread;
+uniform float uMoistureLoss;
+uniform float uFireSpread;
+float lavaHeat(vec2 uv) { vec4 l = texture2D(uLava, uv); return l.r > 0.0005 ? l.g : 0.0; }
+void main() {
+    vec4 s = texture2D(uSoil, vUv);
+    vec4 p = texture2D(uPlants, vUv);
+    vec4 t = texture2D(uTerrain, vUv);
+    float d = texture2D(uWater, vUv).r;
+    float dt = uLifeDt;
+    vec4 open = openSides();
+    vec4 sl = texture2D(uSoil, L());
+    vec4 sr = texture2D(uSoil, R());
+    vec4 sd = texture2D(uSoil, D());
+    vec4 su = texture2D(uSoil, U());
+
+    vec4 around = mix(vec4(s.r), vec4(sl.r, sr.r, sd.r, su.r), open);
+    float moisture = s.r + min(1.0, uMoistureSpread * dt) * (dot(around, vec4(0.25)) - s.r);
+    moisture *= exp(-uMoistureLoss * dt * (0.4 + 0.6 * uDaylight));
+    moisture = max(moisture, d > 0.0015 ? 1.0 : t.g);
+
+    float fire = s.g;
+    float fuel = p.r + 2.0 * p.b + 0.3 * p.g;
+    vec4 flames = vec4(sl.g, sr.g, sd.g, su.g) * open;
+    float spark = max(max(flames.x, flames.y), max(flames.z, flames.w));
+    float heat = max(lavaHeat(vUv), max(max(lavaHeat(L()), lavaHeat(R())), max(lavaHeat(D()), lavaHeat(U()))));
+    spark = max(spark, step(0.3, heat));
+    if (fire > 0.01) {
+        fire = fuel > 0.02 ? min(1.0, fire + 2.0 * dt) : fire - 1.5 * dt;
+    } else {
+        // An irregular front: each cell catches at its own pace, redrawn four times per second of tank time.
+        float pace = 0.4 + 1.2 * hash(floor(vUv / uTexel) + floor(uLifeTime * 4.0));
+        float catching = uFireSpread * pace * smoothstep(0.03, 0.2, fuel) * (1.0 - smoothstep(0.6, 0.98, moisture));
+        fire = min(1.0, catching * dt) * spark;
+    }
+    if (d > 0.0015) {
+        fire = 0.0;
+    }
+    fire -= dt * 2.0 * smoothstep(0.6, 1.0, t.g); // soaked by the rain
+    gl_FragColor = vec4(clamp(moisture, 0.0, 1.0), clamp(fire, 0.0, 1.0), 0.0, 0.0);
+}
+`;
+
+/**
+ * Plants. Grass grows by day on damp sand or clay, from its own roots and from the seeds of its neighbours,
+ * faster on ash; it dries up without water and rots under it. Moss covers damp bare rock, in the shade too.
+ * Trees grow slowly out of old meadows. Fire burns them all into ash; lava swallows everything.
+ */
+export const plantsShader = /* glsl */ `
+${COMMON}
+${LIFE_UNIFORMS}
+uniform float uGrassGrowth;
+uniform float uGrassDecay;
+uniform float uDrown;
+uniform float uMossGrowth;
+uniform float uTreeGrowth;
+uniform float uBurn;
+uniform float uAshFade;
+uniform float uEarthFertility;
+void main() {
+    vec4 p = texture2D(uPlants, vUv);
+    float e = texture2D(uEarth, vUv).r;
+    vec4 s = texture2D(uSoil, vUv);
+    vec4 t = texture2D(uTerrain, vUv);
+    float d = texture2D(uWater, vUv).r;
+    float dt = uLifeDt;
+    if (texture2D(uLava, vUv).r > 0.0005) {
+        gl_FragColor = vec4(0.0);
+        return;
+    }
+    vec4 open = openSides();
+    vec4 n = (texture2D(uPlants, L()) * open.x + texture2D(uPlants, R()) * open.y
+            + texture2D(uPlants, D()) * open.z + texture2D(uPlants, U()) * open.w) * 0.25;
+    bool soil = t.r + t.b + e > 0.002;
+    bool rock = !soil && t.a > 0.002;
+    float fertility = t.r < 0.002 && e > 0.002 ? uEarthFertility : 1.0; // bare earth
+    float wet = smoothstep(0.1, 0.35, s.r);
+    float dry = 1.0 - smoothstep(0.04, 0.15, s.r);
+    float drowned = smoothstep(0.003, 0.008, d);
+    float sun = uDaylight;
+    float burn = uBurn * s.g * dt;
+
+    float grass = p.r;
+    if (soil) {
+        float vigour = wet * sun * (1.0 - drowned) * (1.0 + 2.0 * p.a) * fertility;
+        grass += uGrassGrowth * dt * vigour * (grass + 0.3 * n.r + 0.02 * p.a) * (1.0 - grass);
+    } else {
+        grass = 0.0;
+    }
+    grass -= dt * (uGrassDecay * dry * (0.3 + 0.7 * sun) + uDrown * drowned);
+    float burntGrass = clamp(burn, 0.0, max(grass, 0.0));
+    grass -= burntGrass;
+
+    float moss = p.g;
+    if (rock) {
+        moss += uMossGrowth * dt * wet * (0.5 + 0.5 * sun) * (moss + 0.3 * n.g + 0.01) * (1.0 - moss);
+    } else {
+        moss -= dt * 0.5; // buried under sand or clay
+    }
+    moss -= dt * uGrassDecay * 0.3 * dry + burn * 0.3;
+
+    float trees = p.b;
+    if (soil) {
+        float meadow = smoothstep(0.5, 0.85, grass);
+        // 0.01: a few seeds carried by the wind and the birds
+        trees += uTreeGrowth * dt * wet * sun * meadow * (trees + 0.05 * n.b + 0.01) * (1.0 - trees);
+    } else {
+        trees = 0.0;
+    }
+    trees -= dt * (uGrassDecay * 0.5 * dry + uDrown * 0.3 * smoothstep(0.01, 0.03, d)); // trees survive shallow floods
+    float burntTrees = clamp(burn * 0.35, 0.0, max(trees, 0.0));
+    trees -= burntTrees;
+
+    float ash = p.a + (burntGrass + 2.0 * burntTrees) * 1.5 - dt * (uAshFade + 0.1 * drowned);
+    gl_FragColor = clamp(vec4(grass, moss, trees, ash), 0.0, 1.0);
+}
+`;
+
+/**
+ * Small map of the tank read back by the CPU (asynchronously, so the GPU never waits): ground height, water depth,
+ * lava and earth depths, each texel the average of a block of cells. Used to aim the tools, for the puddles under
+ * broken panes, to size the wave of a meteorite and to skip the lava and earth passes while there is none.
+ */
+export const heightsShader = /* glsl */ `
+${COMMON}
+uniform sampler2D uTerrain;
+uniform sampler2D uLava;
+uniform sampler2D uWater;
+${GROUND}
+void main() {
+    gl_FragColor = vec4(groundAt(vUv), texture2D(uWater, vUv).r, texture2D(uLava, vUv).r, texture2D(uEarth, vUv).r);
+}
+`;
+
+// --- Meteorite --------------------------------------------------------------------------------------------
+
+// Impact of a meteorite, run once. Every crater pass reads the same state and keeps its own part.
+const CRATER = /* glsl */ `
+uniform vec2 uImpact;         // uv
+uniform float uImpactRadius;  // uv
+uniform float uImpactDepth;   // world units
+uniform float uRim;           // height of the rim, in depths
+uniform float uMaxSand;
+uniform float uImpactLava;    // depth of molten rock left at the bottom
+uniform float uWave;          // depth added to the ring of water (see impactWave())
+uniform float uFireRadius;    // in crater radii
+float craterR() { return length(vUv - uImpact) / uImpactRadius; }
+// craterProfile() of sand-physics.js, with a ragged rim.
+float craterChange() {
+    float r = craterR();
+    vec2 dir = vUv - uImpact;
+    float angle = atan(dir.y, dir.x);
+    float ragged = 0.7 + 0.3 * sin(angle * 7.0 + uImpact.x * 41.0) + 0.2 * sin(angle * 13.0 - uImpact.y * 29.0);
+    float bowl = r < 1.0 ? -uImpactDepth * (1.0 - r * r) : 0.0;
+    return bowl + uRim * uImpactDepth * exp(-pow((r - 1.0) / 0.3, 2.0)) * ragged;
+}
+// The bowl is blown out from the top of the stack down; the rim is the ground pushed up, so its top layer rises.
+void crater(inout vec4 t, inout float e) {
+    float change = craterChange();
+    if (change < 0.0) {
+        float dig = -change;
+        float sand = min(t.r, dig);
+        t.r -= sand;
+        dig -= sand;
+        float earth = min(e, dig);
+        e -= earth;
+        dig -= earth;
+        float clay = min(t.b, dig);
+        t.b -= clay;
+        dig -= clay;
+        t.a = max(0.0, t.a - dig);
+    } else {
+        float up = min(max(0.0, uMaxSand - (t.r + t.b + t.a + e)), change);
+        if (t.r > 0.0005) t.r += up;
+        else if (e > 0.0005) e += up;
+        else if (t.b > 0.0005) t.b += up;
+        else t.a += up;
+    }
+    if (craterR() < 1.0) {
+        t.g = 0.0; // dried by the heat
+    }
+}
+`;
+
+export const craterTerrainShader = /* glsl */ `
+${COMMON}
+${CRATER}
+uniform sampler2D uTerrain;
+uniform sampler2D uEarth;
+void main() {
+    vec4 t = texture2D(uTerrain, vUv);
+    float e = texture2D(uEarth, vUv).r;
+    crater(t, e);
+    gl_FragColor = t;
+}
+`;
+
+export const craterEarthShader = /* glsl */ `
+${COMMON}
+${CRATER}
+uniform sampler2D uTerrain;
+uniform sampler2D uEarth;
+void main() {
+    vec4 t = texture2D(uTerrain, vUv);
+    float e = texture2D(uEarth, vUv).r;
+    crater(t, e);
+    gl_FragColor = vec4(e, 0.0, 0.0, 0.0);
+}
+`;
+
+/** Molten rock at the bottom of the crater. */
+export const craterLavaShader = /* glsl */ `
+${COMMON}
+${CRATER}
+uniform sampler2D uLava;
+void main() {
+    vec4 l = texture2D(uLava, vUv);
+    float r = craterR() / 0.65;
+    float added = r < 1.0 ? uImpactLava * (1.0 - r * r) : 0.0;
+    l.g = (l.r * l.g + added) / max(l.r + added, 1e-6);
+    l.r += added;
+    gl_FragColor = l;
+}
+`;
+
+/** The water of the crater is blown out into a ring around it, which runs off as a wave. */
+export const craterWaterShader = /* glsl */ `
+${COMMON}
+${CRATER}
+uniform sampler2D uWater;
+void main() {
+    vec4 w = texture2D(uWater, vUv);
+    float r = craterR();
+    if (r < 1.15) {
+        w = vec4(0.0);
+    } else {
+        w.r += uWave * smoothstep(1.15, 1.35, r) * smoothstep(2.1, 1.8, r);
+    }
+    gl_FragColor = w;
+}
+`;
+
+/** Nothing is left alive in the crater; around it, burnt ground. */
+export const craterPlantsShader = /* glsl */ `
+${COMMON}
+${CRATER}
+uniform sampler2D uPlants;
+void main() {
+    vec4 p = texture2D(uPlants, vUv);
+    float r = craterR();
+    if (r < 1.15) {
+        p = vec4(0.0);
+    } else if (r < 1.6) {
+        p = vec4(p.r * 0.3, p.g * 0.3, p.b, max(p.a, 0.6));
+    }
+    gl_FragColor = p;
+}
+`;
+
+/** The blast sets fire to what can burn around the crater, and dries the ground it digs. */
+export const craterSoilShader = /* glsl */ `
+${COMMON}
+${CRATER}
+uniform sampler2D uSoil;
+void main() {
+    vec4 s = texture2D(uSoil, vUv);
+    float r = craterR();
+    if (r < uFireRadius) {
+        s.g = 1.0; // dies out at once where there is nothing to burn
+    }
+    if (r < 1.0) {
+        s.r = 0.0;
+    }
+    gl_FragColor = s;
 }
 `;

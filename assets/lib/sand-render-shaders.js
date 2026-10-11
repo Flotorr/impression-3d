@@ -7,9 +7,10 @@ const OUTPUT = /* glsl */ `
 #include <colorspace_fragment>
 `;
 
-// Ground height for vertex shaders (uTerrain and uLava declared by the caller).
+// Ground height (uTerrain and uLava declared by the caller; declares uEarth).
 const GROUND = /* glsl */ `
-float groundAt(vec2 uv) { vec4 t = texture2D(uTerrain, uv); return t.r + t.b + t.a + texture2D(uLava, uv).r; }
+uniform sampler2D uEarth;
+float groundAt(vec2 uv) { vec4 t = texture2D(uTerrain, uv); return t.r + t.b + t.a + texture2D(uEarth, uv).r + texture2D(uLava, uv).r; }
 `;
 
 const SHARED = /* glsl */ `
@@ -22,6 +23,10 @@ uniform vec3 uSun;
 uniform float uTime;
 uniform float uGloom; // 0 sunny, 1 overcast (rain)
 uniform vec2 uSwell;  // live ocean: still-water level and swell amplitude (0 when off)
+uniform sampler2D uPlants; // grass, moss, trees, ash
+uniform sampler2D uSoil;   // moisture, fire
+uniform vec3 uSunTint;     // colour and strength of the light along uSun: the sun by day, the moon at night
+uniform float uDaylight;   // 0 at night, 1 by day
 vec3 lin(vec3 c) { return pow(c, vec3(2.2)); }
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 ${GROUND}
@@ -42,11 +47,14 @@ vec4 soft(sampler2D tex, vec2 uv) {
                 + texture2D(tex, uv + d) + texture2D(tex, uv - d)
                 + texture2D(tex, uv + vec2(d.x, -d.y)) + texture2D(tex, uv + vec2(-d.x, d.y)));
 }
+// Light of the sky, dark blue at night.
+vec3 ambientTint() { return mix(vec3(0.16, 0.2, 0.34), vec3(1.0), uDaylight); }
+float ambientLevel() { return mix(0.22, 1.0, uDaylight); }
 vec3 skyColour(vec3 dir) {
     vec3 clear = mix(lin(vec3(0.86, 0.9, 0.95)), lin(vec3(0.42, 0.62, 0.86)), clamp(dir.y * 1.4, 0.0, 1.0));
-    return mix(clear, lin(vec3(0.6, 0.63, 0.67)), uGloom * 0.8);
+    return mix(clear, lin(vec3(0.6, 0.63, 0.67)), uGloom * 0.8) * ambientTint();
 }
-float sunlight() { return mix(1.0, 0.35, uGloom); }
+vec3 sunlight() { return mix(1.0, 0.35, uGloom) * uSunTint; }
 
 // Glowing lava: yellow-orange when molten. As it cools, a black crust closes over it and the glow
 // shrinks to a network of cracks that dims from orange to dark red.
@@ -139,14 +147,40 @@ void main() {
     vec3 rock = mix(vec3(0.3, 0.29, 0.29), vec3(0.55, 0.53, 0.5), rockNoise) * (0.85 + 0.3 * grain * grain);
     vec4 layers = soft(uTerrain, vUv);
     float edgeNoise = (valueNoise(q * 60.0) - 0.5) * 0.003; // irregular edges between materials
+    float earthLayer = soft(uEarth, vUv).r;
+    // Earth: dark brown soil with crumbs and a few pebbles.
+    float crumbs = valueNoise(q * 150.0) * 0.6 + valueNoise(q * 45.0) * 0.4;
+    vec3 earth = mix(vec3(0.33, 0.23, 0.15), vec3(0.47, 0.35, 0.23), crumbs);
+    earth = mix(earth, vec3(0.55, 0.52, 0.48), step(0.985, hash(floor(q * 260.0))) * 0.7);
     float clayCover = smoothstep(0.0005, 0.005, layers.b + edgeNoise);
+    float earthCover = smoothstep(0.0005, 0.005, earthLayer + edgeNoise);
     float sandCover = smoothstep(0.0005, 0.005, layers.r + edgeNoise);
     vec3 surface = mix(rock, clay, clayCover);
+    surface = mix(surface, earth, earthCover);
     surface = mix(surface, sand, sandCover);
     // The bare bottom of the tank (everything removed): a light, even floor.
-    surface = mix(vec3(0.72, 0.74, 0.76), surface, smoothstep(0.0005, 0.004, layers.r + layers.b + layers.a));
-    float looseCover = max(sandCover, clayCover);
-    vec3 albedo = lin(surface) * mix(1.0, mix(0.75, 0.42, looseCover), t.g); // damp ground is darker
+    surface = mix(vec3(0.72, 0.74, 0.76), surface, smoothstep(0.0005, 0.004, layers.r + layers.b + layers.a + earthLayer));
+    float looseCover = max(max(sandCover, clayCover), earthCover);
+
+    // Plants over the ground: tufted grass on sand and clay, yellowing as the soil dries and darker under the
+    // trees; moss on rock; ash where it burned.
+    vec4 plants = soft(uPlants, vUv);
+    float moisture = texture2D(uSoil, vUv).r;
+    float tufts = valueNoise(q * 140.0) * 0.6 + valueNoise(q * 420.0) * 0.4;
+    float grassCover = smoothstep(0.08, 0.45, plants.r * (0.7 + 0.6 * tufts) + edgeNoise * 20.0);
+    float thirst = 1.0 - smoothstep(0.08, 0.35, moisture);
+    vec3 grass = mix(vec3(0.46, 0.53, 0.27), vec3(0.32, 0.42, 0.2), smoothstep(0.5, 1.0, plants.r));
+    grass = mix(grass, vec3(0.26, 0.31, 0.16), smoothstep(0.2, 0.7, plants.b) * 0.5);
+    grass = mix(grass, vec3(0.66, 0.6, 0.36), thirst * 0.85) * (0.84 + 0.32 * tufts);
+    float mossCover = smoothstep(0.1, 0.5, plants.g * (0.6 + 0.8 * valueNoise(q * 70.0)));
+    vec3 moss = vec3(0.36, 0.42, 0.24) * (0.8 + 0.4 * rockNoise);
+    float ashCover = smoothstep(0.05, 0.4, plants.a * (0.7 + 0.6 * tufts));
+    surface = mix(surface, moss, mossCover);
+    surface = mix(surface, grass, grassCover);
+    surface = mix(surface, mix(vec3(0.25, 0.24, 0.22), vec3(0.44, 0.42, 0.38), tufts), ashCover * 0.9);
+    float bare = (1.0 - grassCover) * (1.0 - ashCover);
+
+    vec3 albedo = lin(surface) * mix(1.0, mix(0.75, 0.42, looseCover), t.g * bare); // damp ground is darker
 
     // Ambient occlusion from the local hollow
     float around = 0.25 * (groundAt(vUv + vec2(uTexel.x * 4.0, 0.0)) + groundAt(vUv - vec2(uTexel.x * 4.0, 0.0))
@@ -157,8 +191,9 @@ void main() {
     vec3 light = lin(vec3(1.0, 0.95, 0.86)) * diffuse * 1.15 * sunlight() + skyColour(n) * 0.45;
     vec3 colour = albedo * light * ao;
     vec3 R = reflect(-uSun, n);
-    colour += t.g * pow(max(dot(R, V), 0.0), 40.0) * 0.25;                                       // sheen of wet ground
-    colour += (1.0 - t.g) * sandCover * step(0.996, grain) * pow(max(dot(R, V), 0.0), 6.0) * 0.8; // glints of dry sand
+    vec3 glint = uSunTint * pow(max(dot(R, V), 0.0), 40.0);
+    colour += t.g * bare * glint * 0.25;                                                                  // sheen of wet ground
+    colour += (1.0 - t.g) * sandCover * bare * step(0.996, grain) * uSunTint * pow(max(dot(R, V), 0.0), 6.0) * 0.8; // glints of dry sand
 
     // Lava on top: cooled crust is dark rock, the cracks glow (the glow ignores the sunlight).
     // Its edge is drawn from the depth averaged with the neighbours and slightly perturbed, so it follows a
@@ -166,6 +201,15 @@ void main() {
     float lavaCover = smoothstep(0.0008, 0.004, soft(uLava, vUv).r + edgeNoise * 0.5);
     vec3 crust = lin(vec3(0.12, 0.1, 0.1)) * light;
     colour = mix(colour, crust + lavaGlow(q, lava.g, uTime), lavaCover);
+
+    // Fire: flickering flames over what burns, the ground blackened behind them (the flames ignore the light).
+    float fire = soft(uSoil, vUv).g;
+    if (fire > 0.002) {
+        float flicker = valueNoise(q * 40.0 + vec2(0.0, -uTime * 6.0)) * 0.6 + valueNoise(q * 95.0 - uTime * 9.0) * 0.4;
+        vec3 flame = mix(lin(vec3(0.9, 0.25, 0.04)), lin(vec3(1.0, 0.75, 0.3)), flicker);
+        colour = mix(colour, colour * 0.35, smoothstep(0.0, 0.5, fire));
+        colour += flame * smoothstep(0.0, 0.6, fire) * (0.4 + 1.6 * flicker * flicker) * 1.4;
+    }
 
     if (depth > 0.0006) {
         float under = exp(-depth * 22.0);
@@ -237,7 +281,7 @@ void main() {
 
     vec3 transmittance = exp(-d * vec3(38.0, 11.0, 7.0)); // red is absorbed first
     vec3 body = mix(lin(vec3(0.03, 0.2, 0.28)), lin(vec3(0.35, 0.7, 0.72)), transmittance.g);
-    body *= (0.55 + 0.45 * max(dot(n, uSun), 0.0)) * mix(1.0, 0.75, uGloom);
+    body *= (0.55 + 0.45 * max(dot(n, uSun), 0.0)) * mix(1.0, 0.75, uGloom) * ambientTint();
 
     float speed = length(w.gb);
     // Foam and boiling use smooth drifting noise (a per-pixel hash would look like pixels).
@@ -262,7 +306,7 @@ void main() {
         float streaks = smoothstep(0.45, 0.8, valueNoise(vWorld.xz * vec2(90.0, 35.0) + uTime * vec2(0.3, -0.8)));
         foam += breaking * (0.55 + 0.45 * churn) + steep * streaks * 0.6;
     }
-    colour = mix(colour, vec3(0.92), clamp(foam, 0.0, 1.0) * 0.75);
+    colour = mix(colour, vec3(0.92) * ambientLevel(), clamp(foam, 0.0, 1.0) * 0.75);
     float alpha = clamp(1.0 - transmittance.g * 0.85 + fresnel * 0.6 + foam, 0.12, 0.96);
     alpha *= smoothstep(0.0006, 0.0025, d); // soft shoreline
     gl_FragColor = vec4(colour, alpha);
@@ -315,26 +359,38 @@ void main() {
     if (uLayer > 0.5) {
         float depthBelowSurface = vTopHeight - vHeight;
         vec3 water = mix(lin(vec3(0.3, 0.68, 0.75)), lin(vec3(0.03, 0.18, 0.27)), clamp(depthBelowSurface * 14.0, 0.0, 1.0));
+        water *= ambientTint();
         gl_FragColor = vec4(water, 0.55 + 0.3 * clamp(depthBelowSurface * 20.0, 0.0, 1.0));
         ${OUTPUT}
         return;
     }
-    // Which layer is at this height: rock at the bottom, then clay, sand and lava.
+    // Which layer is at this height: rock at the bottom, then clay, earth, sand and lava.
     vec4 t = texture2D(uTerrain, vEdgeUv);
     vec4 lava = texture2D(uLava, vEdgeUv);
     float rockTop = t.a;
     float clayTop = rockTop + t.b;
-    float sandTop = clayTop + t.r;
+    float earthTop = clayTop + texture2D(uEarth, vEdgeUv).r;
+    float sandTop = earthTop + t.r;
     float grain = hash(floor(vec2(vWorld.x + vWorld.z, vHeight) * 900.0));
     vec3 colour;
     if (vHeight > sandTop + 0.0005 && lava.r > 0.0003) {
         colour = lin(vec3(0.12, 0.1, 0.1)) * 0.6 + lavaGlow(vec2(vWorld.x + vWorld.z, vHeight * 3.0), lava.g, uTime);
-    } else if (vHeight > clayTop) {
+    } else if (vHeight > earthTop) {
         // Sand strata: thin layers, damp near the surface when wet.
         float layers = 0.88 + 0.12 * sin(vHeight * 170.0 + sin(vWorld.x * 9.0 + vWorld.z * 7.0) * 2.0);
         vec3 sand = mix(vec3(0.62, 0.48, 0.32), vec3(0.86, 0.73, 0.53), smoothstep(0.0, 0.25, vHeight)) * layers * (0.9 + 0.2 * grain);
         float damp = t.g * smoothstep(0.06, 0.0, sandTop - vHeight);
         colour = lin(sand) * mix(1.0, 0.5, damp) * 0.85;
+    } else if (vHeight > clayTop) {
+        // Earth: brown, darker and finer near the top (humus), with pebbles and a few roots.
+        vec2 p = vec2(vWorld.x + vWorld.z, vHeight);
+        vec3 earth = mix(vec3(0.38, 0.27, 0.17), vec3(0.27, 0.18, 0.11), smoothstep(0.03, 0.0, earthTop - vHeight));
+        earth *= 0.85 + 0.3 * valueNoise(p * 160.0);
+        earth = mix(earth, vec3(0.52, 0.5, 0.46), step(0.97, hash(floor(p * 420.0))) * 0.8);
+        float roots = smoothstep(0.92, 1.0, sin(p.x * 140.0 + sin(p.y * 90.0) * 3.0)) * smoothstep(0.04, 0.0, earthTop - vHeight);
+        earth = mix(earth, vec3(0.6, 0.48, 0.34), roots * 0.5);
+        float damp = t.g * smoothstep(0.06, 0.0, earthTop - vHeight);
+        colour = lin(earth) * mix(1.0, 0.6, damp) * 0.85;
     } else if (vHeight > rockTop) {
         vec3 clay = mix(vec3(0.5, 0.25, 0.16), vec3(0.64, 0.34, 0.22), valueNoise(vec2(vWorld.x + vWorld.z, vHeight) * 120.0));
         colour = lin(clay) * 0.85;
@@ -342,6 +398,13 @@ void main() {
         float strata = valueNoise(vec2((vWorld.x + vWorld.z) * 8.0, vHeight * 90.0));
         vec3 rock = mix(vec3(0.26, 0.25, 0.25), vec3(0.46, 0.44, 0.42), strata) * (0.85 + 0.3 * grain);
         colour = lin(rock) * 0.85;
+    }
+    // A thin green line of turf at the top of a planted column.
+    float turf = smoothstep(0.2, 0.6, texture2D(uPlants, vEdgeUv).r) * step(vTopHeight - 0.004, vHeight) * step(lava.r, 0.0003);
+    colour = mix(colour, lin(vec3(0.24, 0.42, 0.15)) * 0.85, turf);
+    colour *= ambientTint();
+    if (vHeight > sandTop + 0.0005 && lava.r > 0.0003) {
+        colour += lavaGlow(vec2(vWorld.x + vWorld.z, vHeight * 3.0), lava.g, uTime) * (1.0 - ambientTint()); // the glow stays at night
     }
     gl_FragColor = vec4(colour, 1.0);
     ${OUTPUT}
@@ -417,6 +480,7 @@ void main() {
 export const rainShader = {
     vertexShader: /* glsl */ `
 uniform sampler2D uTerrain;
+uniform sampler2D uEarth;
 uniform sampler2D uLava;
 uniform sampler2D uWater;
 uniform float uTime;
@@ -435,7 +499,7 @@ void main() {
     float ground = -0.1;
     if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
         vec4 t = texture2D(uTerrain, uv);
-        ground = t.r + t.b + t.a + texture2D(uLava, uv).r + texture2D(uWater, uv).r;
+        ground = t.r + t.b + t.a + texture2D(uEarth, uv).r + texture2D(uLava, uv).r + texture2D(uWater, uv).r;
     } else if (abs(x) < 1.07 && abs(z) < 1.07) {
         ground = 0.0; // the wooden base
     }
@@ -461,6 +525,7 @@ void main() {
 export const waterfallShader = {
     vertexShader: /* glsl */ `
 uniform sampler2D uTerrain;
+uniform sampler2D uEarth;
 uniform sampler2D uLava;
 uniform sampler2D uWater;
 uniform vec4 uBroken;
@@ -483,7 +548,7 @@ void main() {
     else { uv = vec2(t, 1.0 - inset); outward = vec3(0.0, 0.0, -1.0); broken = uBroken.w; }
 
     vec4 column = texture2D(uTerrain, uv);
-    float b = column.r + column.b + column.a + texture2D(uLava, uv).r;
+    float b = column.r + column.b + column.a + texture2D(uEarth, uv).r + texture2D(uLava, uv).r;
     float d = texture2D(uWater, uv).r;
     const float LIFE = 0.8;
     float age = fract(uTime / LIFE + aSeed.y) * LIFE;
@@ -549,6 +614,7 @@ void main() {
 export const steamShader = {
     vertexShader: /* glsl */ `
 uniform sampler2D uTerrain;
+uniform sampler2D uEarth;
 uniform sampler2D uLava;
 uniform sampler2D uWater;
 uniform float uTime;
@@ -563,7 +629,7 @@ void main() {
     float age = fract(uTime / LIFE + aSeed.z);
     vec2 uv = vec2(hash(aSeed.xy + cycle), hash(aSeed.yx + cycle * 1.7));
     vec4 t = texture2D(uTerrain, uv);
-    float top = t.r + t.b + t.a + texture2D(uLava, uv).r + texture2D(uWater, uv).r;
+    float top = t.r + t.b + t.a + texture2D(uEarth, uv).r + texture2D(uLava, uv).r + texture2D(uWater, uv).r;
     float boiling = texture2D(uLava, uv).b;
     vec3 p = vec3((uv.x - 0.5) * uWorld, top + age * 0.35, (0.5 - uv.y) * uWorld);
     p.xz += vec2(sin(age * 5.0 + aSeed.x * 20.0), cos(age * 4.0 + aSeed.y * 20.0)) * 0.03 * age;
@@ -580,6 +646,117 @@ void main() {
     if (r > 0.5 || vAlpha <= 0.0) discard;
     gl_FragColor = vec4(vec3(0.93), vAlpha * smoothstep(0.5, 0.0, r));
     #include <colorspace_fragment>
+}
+`,
+};
+
+/**
+ * Smoke over the fires, like the steam: each particle draws a random spot at every cycle and only shows if it
+ * burns there (soil.g); it leaves as an ember, turns into grey smoke, drifts with a light wind and fades.
+ */
+export const smokeShader = {
+    vertexShader: /* glsl */ `
+uniform sampler2D uTerrain;
+uniform sampler2D uEarth;
+uniform sampler2D uLava;
+uniform sampler2D uSoil;
+uniform float uTime;
+uniform float uWorld;
+uniform float uFocal;
+attribute vec3 aSeed;
+varying float vAlpha;
+varying float vAge;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+void main() {
+    const float LIFE = 2.4;
+    float cycle = floor(uTime / LIFE + aSeed.z);
+    float age = fract(uTime / LIFE + aSeed.z);
+    vec2 uv = vec2(hash(aSeed.xy + cycle * 1.3), hash(aSeed.yx + cycle * 2.1));
+    vec4 t = texture2D(uTerrain, uv);
+    float top = t.r + t.b + t.a + texture2D(uEarth, uv).r + texture2D(uLava, uv).r;
+    vec3 p = vec3((uv.x - 0.5) * uWorld, top + age * 0.55, (0.5 - uv.y) * uWorld);
+    p.xz += vec2(sin(age * 3.0 + aSeed.x * 20.0), cos(age * 2.5 + aSeed.y * 20.0)) * 0.04 * age + vec2(0.08, 0.03) * age;
+    vAlpha = step(0.2, texture2D(uSoil, uv).g) * sin(age * 3.14159) * 0.55;
+    vAge = age;
+    vec4 mv = viewMatrix * vec4(p, 1.0);
+    gl_PointSize = vAlpha > 0.0 ? uFocal * (0.025 + 0.09 * age) / -mv.z : 0.0;
+    gl_Position = projectionMatrix * mv;
+}
+`,
+    fragmentShader: /* glsl */ `
+varying float vAlpha;
+varying float vAge;
+void main() {
+    float r = length(gl_PointCoord - 0.5);
+    if (r > 0.5 || vAlpha <= 0.0) discard;
+    vec3 colour = mix(vec3(1.0, 0.55, 0.2), vec3(0.3, 0.29, 0.28), smoothstep(0.0, 0.2, vAge));
+    gl_FragColor = vec4(pow(colour, vec3(2.2)), vAlpha * smoothstep(0.5, 0.0, r));
+    #include <colorspace_fragment>
+}
+`,
+};
+
+/**
+ * Trees, drawn in 3D out of the "trees" layer of the plants: every slot of a fixed grid holds a tree that
+ * appears once the wood there passes its own threshold, then grows with it. Slots below their threshold are
+ * pushed out of view. Low-poly facets (normals from the screen-space derivatives), a little sway in the wind;
+ * they dry up with the soil, glow while they burn and stay charred on the ash.
+ */
+export const treeShader = {
+    vertexShader: /* glsl */ `
+uniform sampler2D uTerrain;
+uniform sampler2D uEarth;
+uniform sampler2D uLava;
+uniform sampler2D uPlants;
+uniform sampler2D uSoil;
+uniform float uTime;
+uniform float uWorld;
+attribute vec4 aSlot; // uv, threshold, size (random)
+attribute float aPart; // 0 trunk, 1 crown
+varying vec3 vWorld;
+varying float vPart;
+varying vec4 vLife; // colour variation, fire, ash, soil moisture
+void main() {
+    vec4 plants = texture2D(uPlants, aSlot.xy);
+    float threshold = 0.12 + 0.6 * aSlot.z;
+    float size = clamp((plants.b - threshold) / (1.0 - threshold) * 1.6, 0.0, 1.0) * (0.7 + 0.6 * aSlot.w);
+    if (size < 0.05) {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        return;
+    }
+    vec4 t = texture2D(uTerrain, aSlot.xy);
+    float ground = t.r + t.b + t.a + texture2D(uEarth, aSlot.xy).r + texture2D(uLava, aSlot.xy).r;
+    float angle = fract(aSlot.z * 91.7 + aSlot.w * 13.1) * 6.2832;
+    vec3 p = position * size;
+    p.xz = mat2(cos(angle), -sin(angle), sin(angle), cos(angle)) * p.xz;
+    p.x += sin(uTime * 1.3 + aSlot.x * 40.0) * 0.03 * p.y * aPart;
+    vec3 world = vec3((aSlot.x - 0.5) * uWorld, ground - 0.002, (0.5 - aSlot.y) * uWorld) + p;
+    vec4 soil = texture2D(uSoil, aSlot.xy);
+    vWorld = world;
+    vPart = aPart;
+    vLife = vec4(fract(aSlot.w * 7.3), soil.g, plants.a, soil.r);
+    gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
+}
+`,
+    fragmentShader: /* glsl */ `
+${SHARED}
+varying vec3 vWorld;
+varying float vPart;
+varying vec4 vLife;
+void main() {
+    vec3 V = normalize(cameraPosition - vWorld);
+    vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
+    if (dot(n, V) < 0.0) n = -n;
+    vec3 leaves = mix(vec3(0.2, 0.32, 0.15), vec3(0.36, 0.45, 0.2), vLife.x);
+    leaves = mix(leaves, vec3(0.56, 0.46, 0.2), (1.0 - smoothstep(0.08, 0.35, vLife.w)) * 0.8);
+    vec3 albedo = lin(mix(vec3(0.36, 0.25, 0.16), leaves, vPart));
+    albedo = mix(albedo, lin(vec3(0.08, 0.07, 0.06)), smoothstep(0.1, 0.6, vLife.z)); // charred
+    float diffuse = max(dot(n, uSun), 0.0) * 0.8 + 0.2;
+    vec3 colour = albedo * (lin(vec3(1.0, 0.95, 0.86)) * diffuse * 1.1 * sunlight() + skyColour(n) * 0.5);
+    float flicker = valueNoise(vWorld.xz * 60.0 + vWorld.y * 80.0 - uTime * 8.0);
+    colour += lin(vec3(1.0, 0.45, 0.1)) * smoothstep(0.1, 0.6, vLife.y) * (0.6 + 1.4 * flicker) * vPart;
+    gl_FragColor = vec4(colour, 1.0);
+    ${OUTPUT}
 }
 `,
 };

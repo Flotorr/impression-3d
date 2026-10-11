@@ -1,29 +1,57 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { MAX_SPRINGS, OCEAN, oceanWaves, oceanWaveTrain, PHYSICS, toggleSpring, tool as toolById, worldToUv } from './sand-physics.js';
-import { createRain, createSteam, createWaterfall, FLOOR, GlassTank, WALL_HEIGHT } from './sand-effects.js';
+import {
+    evaporation,
+    MAX_SPRINGS,
+    METEOR_SIZES,
+    nextPhysicsCap,
+    OCEAN,
+    oceanWaves,
+    oceanWaveTrain,
+    panesHit,
+    PHYSICS,
+    sunAt,
+    TIME,
+    timeRates,
+    toggleSpring,
+    tool as toolById,
+    worldToUv,
+} from './sand-physics.js';
+import { createRain, createSmoke, createSteam, createTrees, createWaterfall, FLOOR, GlassTank, WALL_HEIGHT } from './sand-effects.js';
 import { sectionShader, shadowShader, terrainShader, waterSurfaceShader } from './sand-render-shaders.js';
+import { Meteors } from './sand-meteor.js';
 import { FloatingObjects } from './sand-objects.js';
 import { SandSimulation } from './sand-sim.js';
 
 const PUDDLE_EVERY = 10; // frames between two readbacks of the water leaving through broken panes
+const SUN_COLOUR = new THREE.Color('#fff3dd');
+const START = (TIME.startHour / 24) * TIME.dayLength; // tank time at the start, and the light kept without the cycle
 
 /**
  * The sandbox: glass tank, sand, water and the GPU simulation behind them.
  * Left button / one finger uses the current tool; right button / two fingers turn the camera; wheel / pinch zooms.
  * The hammer breaks a pane: the simulation then lets water and sand out on that side.
  * The wheel zooms towards the point under the cursor.
+ * With `ecology`, plants grow, fires spread, and days and nights go by, at the speed of time chosen with setSpeed().
  * The constructor throws when WebGL 2 or float render targets are unavailable.
  */
 export class SandScene {
-    /** `tools: false` (wave tank): no tools, the left button and one finger turn the camera. */
-    constructor(container, { reducedMotion = false, tools = true } = {}) {
+    /**
+     * `tools: false` (wave tank): no tools, the left button and one finger turn the camera.
+     * `ecology: false` (wave tank): no plants, no fire, no day and night: the light of 10:00 and real time only.
+     */
+    constructor(container, { reducedMotion = false, tools = true, ecology = true } = {}) {
         this.container = container;
+        this.ecology = ecology;
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
         if (!this.renderer.capabilities.isWebGL2) {
             throw new Error('WebGL 2 is required');
         }
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        // Resolution: up to 2 device pixels per CSS pixel, lowered while frames are slow (see adaptResolution).
+        this.maxPixelRatio = Math.min(window.devicePixelRatio, 2);
+        this.renderer.setPixelRatio(this.maxPixelRatio);
+        this.frameTime = 1 / 60;
+        this.sinceResolution = 0;
         this.renderer.setClearColor(0x000000, 0);
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 1.05;
@@ -65,9 +93,29 @@ export class SandScene {
             uTime: { value: 0 },
             uGloom: { value: 0 },
             uSwell: { value: new THREE.Vector2(0, 0) },
+            uEarth: { value: this.sim.earth.texture },
+            uPlants: { value: this.sim.plants.texture },
+            uSoil: { value: this.sim.soil.texture },
+            uSunTint: { value: new THREE.Vector3(1, 1, 1) },
+            uDaylight: { value: 1 },
         };
+        // Time: the speed chosen (0 = pause), what the machine allows the physics, and the clock of the tank.
+        this.speed = TIME.initial;
+        this.physicsCap = TIME.physicsCap;
+        this.clock = START;
+        this.dayCycle = true;
+        this.light = sunAt(START);
         this.buildSandbox();
         this.objects = new FloatingObjects(this.sim, this.scene, this.shared, { floor: FLOOR, base: PHYSICS.world / 2 + 0.07 });
+        if (tools) {
+            this.meteors = new Meteors(this.scene, {
+                groundAt: (uv) => this.sim.sample(uv).ground,
+                onImpact: (uv, meteor) => this.strike(uv, meteor),
+            });
+        }
+        this.meteorSize = 'medium';
+        this.shake = 0; // camera shake after an impact, world units
+        this.shakeOffset = new THREE.Vector3();
         this.objectType = 'duck';
 
         this.tool = 'dig';
@@ -147,11 +195,16 @@ export class SandScene {
         this.waterfall = createWaterfall(this.shared, this.sim.broken);
         this.steam = createSteam(this.shared);
         this.scene.add(this.rainDrops, this.waterfall, this.steam);
+        if (this.ecology) {
+            this.smoke = createSmoke(this.shared);
+            this.scene.add(this.smoke, createTrees(this.shared));
+        }
 
-        this.scene.add(new THREE.HemisphereLight('#dfe9f5', '#8a6b4a', 1.2));
-        const sunLight = new THREE.DirectionalLight('#fff3dd', 2.2);
-        sunLight.position.copy(this.sun).multiplyScalar(5);
-        this.scene.add(sunLight);
+        // Lights for the base, the rim and the floating objects (the rest is lit in its shaders, from uSun).
+        this.hemiLight = new THREE.HemisphereLight('#dfe9f5', '#8a6b4a', 1.2);
+        this.sunLight = new THREE.DirectionalLight(SUN_COLOUR, 2.2);
+        this.sunLight.position.copy(this.sun).multiplyScalar(5);
+        this.scene.add(this.hemiLight, this.sunLight);
 
         const base = new THREE.Mesh(
             new THREE.BoxGeometry(PHYSICS.world + 0.14, 0.1, PHYSICS.world + 0.14),
@@ -236,6 +289,14 @@ export class SandScene {
                 if (hit && this.tank.break(hit.side, hit.point)) {
                     this.sim.setBroken(this.tank.broken);
                     this.onPanesChange?.(this.tank.broken);
+                }
+
+                return;
+            }
+            if (this.tool === 'meteor') {
+                const uv = this.pick();
+                if (uv) {
+                    this.meteors.launch(uv, this.meteor());
                 }
 
                 return;
@@ -374,9 +435,53 @@ export class SandScene {
         this.onObjectsChange?.(0);
     }
 
+    /** The meteorite size chosen (one of METEOR_SIZES). */
+    meteor() {
+        return METEOR_SIZES.find(({ id }) => id === this.meteorSize) ?? METEOR_SIZES[1];
+    }
+
+    /** A meteorite hits the ground: crater, shock, and the panes it lands near when it is big enough. */
+    strike(uv, meteor) {
+        this.sim.impact(uv, meteor);
+        this.shake = Math.max(this.shake, meteor.shake);
+        const sides = panesHit(uv, meteor);
+        const [x, z] = [(uv[0] - 0.5) * PHYSICS.world, (0.5 - uv[1]) * PHYSICS.world];
+        const broken = sides.filter((side) => this.tank.break(side, new THREE.Vector3(
+            side < 2 ? Math.sign(side - 0.5) * PHYSICS.world / 2 : x,
+            0.2,
+            side < 2 ? z : (side === 2 ? 1 : -1) * PHYSICS.world / 2,
+        )));
+        if (broken.length) {
+            this.sim.setBroken(this.tank.broken);
+            this.onPanesChange?.(this.tank.broken);
+        }
+        this.onImpact?.(meteor);
+    }
+
     setRain(raining) {
         this.raining = raining;
         this.sim.rain = raining;
+    }
+
+    /** Speed of time, one of TIME.speeds (0 = pause). */
+    setSpeed(speed) {
+        this.speed = speed;
+    }
+
+    /** Without the cycle the light stays that of 10:00, and plants grow as in full sun. */
+    setDayCycle(on) {
+        this.dayCycle = on;
+    }
+
+    /** Points the sun (or the moon) of the shaders and of the scene lights for the hour of the tank. */
+    applyLight(light) {
+        const [r, g, b] = light.tint;
+        this.sun.set(...light.direction);
+        this.shared.uSunTint.value.set(r, g, b);
+        this.shared.uDaylight.value = light.daylight;
+        this.sunLight.position.copy(this.sun).multiplyScalar(5);
+        this.sunLight.color.setRGB(SUN_COLOUR.r * r, SUN_COLOUR.g * g, SUN_COLOUR.b * b);
+        this.hemiLight.intensity = 1.2 * (0.2 + 0.8 * light.daylight);
     }
 
     setTool(tool) {
@@ -401,10 +506,11 @@ export class SandScene {
         const uv = this.pointer && aiming ? this.pick() : null;
         this.tank.hover(this.tool === 'hammer' ? this.pickPane() : null);
         const visible = uv && this.tool !== 'spring' && this.tool !== 'objects';
+        const radius = this.tool === 'meteor' ? this.meteor().radius : this.brushRadius; // the crater it will dig
         this.terrainUniforms.uBrushVisible.value = visible ? 1 : 0;
         if (uv) {
             this.terrainUniforms.uBrush.value.set(uv[0], uv[1]);
-            this.terrainUniforms.uRadius.value = this.brushRadius;
+            this.terrainUniforms.uRadius.value = radius;
         }
         if (!this.painting || !uv) {
             this.sim.setBrush({ mode: 0 });
@@ -430,11 +536,30 @@ export class SandScene {
         const dt = this.last ? Math.min((now - this.last) / 1000, 0.05) : 1 / 60;
         this.last = now;
 
+        if (this.speed > 1) {
+            this.physicsCap = nextPhysicsCap(this.physicsCap, dt);
+        }
+        const rates = timeRates(this.speed, this.physicsCap);
+        const physicsDt = dt * rates.physics;
+        const lifeDt = this.ecology ? dt * rates.life : 0;
+        if (this.ecology) {
+            this.clock += lifeDt;
+            this.light = sunAt(this.dayCycle ? this.clock : START);
+            this.applyLight(this.light);
+            this.sim.evaporate = evaporation(this.speed, lifeDt, this.light.daylight, this.raining);
+        }
+
+        this.adaptResolution(dt);
+        if (this.frameCount % 4 === 0) {
+            this.sim.refreshHeights(); // for picking and the puddles, read back without stalling the GPU
+        }
         this.updateBrush(dt);
-        this.sim.step(dt);
-        this.objects.step(dt);
+        this.sim.step(dt, rates.physics);
+        this.sim.stepLife(lifeDt, this.light.daylight);
+        this.objects.step(physicsDt);
+        this.meteors?.update(dt);
         this.tank.updateShards(dt);
-        this.updatePuddles(dt);
+        this.updatePuddles(physicsDt);
         // The sky clouds over and clears up gradually.
         const k = 1 - Math.exp(-dt * 1.5);
         const target = this.raining ? 1 : 0;
@@ -443,9 +568,45 @@ export class SandScene {
         this.shared.uTerrain.value = this.sim.terrain.texture;
         this.shared.uLava.value = this.sim.lava.texture;
         this.shared.uWater.value = this.sim.water.texture;
-        this.shared.uTime.value += this.reducedMotion ? dt * 0.3 : dt;
+        this.shared.uEarth.value = this.sim.earth.texture;
+        this.shared.uPlants.value = this.sim.plants.texture;
+        this.shared.uSoil.value = this.sim.soil.texture;
+        // Ripples, flames and rain keep their real pace when time is accelerated, and stop in the pause.
+        this.shared.uTime.value += (this.reducedMotion ? 0.3 : 1) * dt * Math.min(rates.physics, 1);
         this.controls.update();
+        // The shock of an impact shakes the camera for a moment (around where the controls keep it).
+        this.shake *= Math.exp(-dt * 5);
+        const shaking = this.shake > 0.0005 && !this.reducedMotion;
+        if (shaking) {
+            this.shakeOffset.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(this.shake * 2);
+            this.camera.position.add(this.shakeOffset);
+        }
         this.renderer.render(this.scene, this.camera);
+        if (shaking) {
+            this.camera.position.sub(this.shakeOffset);
+        }
+        this.onTick?.(this.clock, this.light);
+    }
+
+    /**
+     * On a high-density screen, drops the resolution a notch when frames stay slow (under ~45 per second for a
+     * second), and raises it back after ten seconds of smooth frames. Never below one pixel per CSS pixel.
+     */
+    adaptResolution(dt) {
+        this.frameTime += (dt - this.frameTime) * 0.05;
+        this.sinceResolution += dt;
+        const ratio = this.renderer.getPixelRatio();
+        let next = ratio;
+        if (this.frameTime > 1 / 45 && this.sinceResolution > 1 && ratio > 1) {
+            next = Math.max(1, ratio - 0.25);
+        } else if (this.frameTime < 1 / 57 && this.sinceResolution > 10 && ratio < this.maxPixelRatio) {
+            next = Math.min(this.maxPixelRatio, ratio + 0.25);
+        }
+        if (next !== ratio) {
+            this.renderer.setPixelRatio(next);
+            this.resize();
+            this.sinceResolution = 0;
+        }
     }
 
     /** Water leaving through broken panes, estimated from the edge depths, feeds the puddles on the table. */
@@ -455,7 +616,6 @@ export class SandScene {
             this.tank.updatePuddles(dt, []);
             return;
         }
-        const cell = PHYSICS.world / this.sim.size;
         const flows = this.tank.broken.map((broken, side) => {
             if (!broken) {
                 return null;
@@ -463,6 +623,7 @@ export class SandScene {
             let volume = 0;
             let weighted = 0;
             this.sim.edgeDepths(side).forEach((depth, i, all) => {
+                const cell = PHYSICS.world / all.length; // the height map is coarser than the simulation
                 const rate = depth > 0.0015 ? depth * Math.sqrt(PHYSICS.gravity * depth) * cell : 0; // depth × speed × width
                 volume += rate;
                 weighted += rate * (i + 0.5) / all.length;
@@ -495,6 +656,10 @@ export class SandScene {
         const focal = (height * this.renderer.getPixelRatio()) / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)));
         this.waterfall.material.uniforms.uFocal.value = focal;
         this.steam.material.uniforms.uFocal.value = focal;
+        this.meteors?.setFocal(focal);
+        if (this.smoke) {
+            this.smoke.material.uniforms.uFocal.value = focal;
+        }
         // Frame the whole tank, at start and when the orientation flips (not on every resize, not to undo a zoom).
         if (this.portrait !== portrait) {
             this.portrait = portrait;
@@ -526,6 +691,7 @@ export class SandScene {
         this.controls.dispose();
         this.tank.dispose();
         this.objects.dispose();
+        this.meteors?.dispose();
         this.scene.traverse((object) => {
             object.geometry?.dispose();
             object.material?.dispose();

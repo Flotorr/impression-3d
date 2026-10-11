@@ -100,10 +100,16 @@ test('the hammer is a tool and the four sides are named', () => {
     assert.ok(WATER_SPEED.min < WATER_SPEED.initial && WATER_SPEED.initial < WATER_SPEED.max);
 });
 
-test('water is conserved: nothing makes it vanish by itself', () => {
+test('water is conserved at real speed: it only evaporates while time is accelerated, in the dry', async () => {
+    const { evaporation } = await import('../../assets/lib/sand-physics.js');
     assert.equal(PHYSICS.evaporation, undefined);
     assert.equal(PHYSICS.infiltration, undefined);
     assert.ok(PHYSICS.rain > 0);
+    assert.equal(evaporation(1, 1, 1, false), 0, 'real time');
+    assert.equal(evaporation(0, 1, 1, false), 0, 'pause');
+    assert.equal(evaporation(20, 1, 1, true), 0, 'in the rain');
+    assert.ok(evaporation(20, 1, 1, false) > evaporation(20, 1, 0, false), 'more in the sun than at night');
+    assert.ok(evaporation(20, 1, 0, false) > 0, 'a little at night too');
 });
 
 test('materials: rock is harder to dig than clay, clay resists water, lava sets into rock', () => {
@@ -119,7 +125,11 @@ test('every painting tool has a brush mode and a rate', () => {
         assert.ok(tool(id).mode > 0 && tool(id).rate > 0, id);
     }
     assert.equal(tool('lava').mode, 9, 'mode shared with the lava brush shader');
-    assert.equal(new Set(TOOLS.map((t) => t.mode).filter((m) => m > 0)).size, 8, 'no two tools share a mode');
+    assert.equal(tool('seeds').mode, 10, 'mode shared with the plants brush shader');
+    assert.equal(tool('fire').mode, 11, 'mode shared with the fire brush shader');
+    assert.equal(new Set(TOOLS.map((t) => t.mode).filter((m) => m > 0)).size, 10, 'no two tools share a mode');
+    assert.equal(toolForKey('g').id, 'seeds');
+    assert.equal(toolForKey('f').id, 'fire');
     assert.equal(toolForKey('o').id, 'objects');
 });
 
@@ -177,4 +187,63 @@ test('ocean: two swell trains beat into sets', async () => {
     assert.ok(wavesPerSet > 8 && wavesPerSet < 15, `${wavesPerSet} waves per set`);
     assert.ok(Math.abs(a.omega - omega) < 1e-9);
     assert.ok(a.kx > 0 && b.kx < 0, 'the two trains come in at slightly different angles');
+});
+
+test('time: the physics follows the speed up to its cap, life follows it all the way', async () => {
+    const { physicsSteps, TIME, timeRates } = await import('../../assets/lib/sand-physics.js');
+    assert.equal(physicsSteps(1 / 60, 0), 0, 'paused: nothing flows');
+    assert.equal(physicsSteps(1 / 60, 1), substepsFor(1 / 60), 'real time as before');
+    assert.ok(Math.abs(physicsSteps(1 / 60, 4) - 4 * substepsFor(1 / 60)) <= 1, 'x4 is four times the steps (to one step)');
+    assert.ok(physicsSteps(1, 4) <= PHYSICS.maxSubsteps * 4, 'a frozen tab still cannot snowball');
+    assert.deepEqual(timeRates(100), { physics: TIME.physicsCap, life: 100 });
+    assert.deepEqual(timeRates(1), { physics: 1, life: 1 });
+    assert.deepEqual(timeRates(0), { physics: 0, life: 0 });
+    assert.deepEqual(timeRates(20, 2), { physics: 2, life: 20 }, 'a slow machine lowers the physics only');
+    assert.ok(TIME.speeds.includes(0) && TIME.speeds.includes(TIME.initial));
+});
+
+test('time: a slow machine lowers the physics speed, never below real time', async () => {
+    const { nextPhysicsCap, TIME } = await import('../../assets/lib/sand-physics.js');
+    let cap = TIME.physicsCap;
+    for (let i = 0; i < 100; i++) {
+        cap = nextPhysicsCap(cap, 0.05);
+    }
+    assert.equal(cap, 1);
+    for (let i = 0; i < 1000; i++) {
+        cap = nextPhysicsCap(cap, 1 / 60);
+    }
+    assert.equal(cap, TIME.physicsCap, 'it recovers on fast frames');
+    assert.equal(nextPhysicsCap(2, 0.025), 2, 'in between, it holds');
+});
+
+test('time: clock and light of the day', async () => {
+    const { clockLabel, clockOf, sunAt, TIME } = await import('../../assets/lib/sand-physics.js');
+    const at = (hour, day = 0) => (day + hour / 24) * TIME.dayLength;
+    assert.equal(clockLabel(at(10)), 'Jour 1 · 10:00');
+    assert.equal(clockLabel(at(14.5, 1)), 'Jour 2 · 14:30');
+    assert.deepEqual(clockOf(at(23.99)), { day: 1, hour: 23, minute: 59 });
+
+    const start = sunAt(at(TIME.startHour));
+    assert.equal(start.daylight, 1);
+    assert.deepEqual(start.tint, [1, 1, 1], 'the start looks like the tank before the cycle');
+    const before = [0.55, 0.75, 0.35].map((c, _, all) => c / Math.hypot(...all));
+    const cos = start.direction.reduce((sum, c, i) => sum + c * before[i], 0);
+    assert.ok(cos > 0.999, 'and the sun is where it was');
+
+    assert.ok(sunAt(at(12)).direction[1] > sunAt(at(8)).direction[1], 'higher at noon');
+    assert.equal(sunAt(at(0)).daylight, 0, 'night');
+    assert.ok(sunAt(at(0)).tint[2] > sunAt(at(0)).tint[0], 'bluish moonlight');
+    assert.ok(sunAt(at(0)).direction[1] > 0, 'the moon lights from above');
+    assert.ok(sunAt(at(6.05)).daylight < 0.05 && sunAt(at(17.95)).daylight < 0.05, 'dawn and dusk start dark');
+    assert.ok(sunAt(at(7)).tint[2] < sunAt(at(7)).tint[0], 'low sun: warm light');
+    assert.ok(Math.max(...sunAt(at(5.99)).tint) < 0.01 && Math.max(...sunAt(at(6.01)).tint) < 0.01, 'no jump when the moon hands over to the sun');
+});
+
+test('life: grass outgrows trees, roots hold steeper than wet sand', async () => {
+    const { LIFE } = await import('../../assets/lib/sand-physics.js');
+    assert.ok(LIFE.grassGrowth > LIFE.treeGrowth && LIFE.grassGrowth > LIFE.mossGrowth);
+    assert.ok(LIFE.rootTalus > PHYSICS.talusWet);
+    assert.ok(LIFE.rootErosion > 0 && LIFE.rootErosion < 1);
+    const reach = Math.sqrt(LIFE.moistureSpread / LIFE.moistureLoss / 4);
+    assert.ok(reach > 8 && reach < 40, `damp ground about ${reach.toFixed(0)} cells from the water`);
 });
